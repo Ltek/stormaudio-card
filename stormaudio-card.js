@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.14.3
+// Version: v2026.10.14.4
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.14.3';
+const BUILD_NUMBER = 'v2026.10.14.4';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -262,6 +262,8 @@ const DEFAULTS = {
   collapsible: false,
   start_collapsed: false,
   show_status: true,
+  show_audio_flow: true,
+  show_video_flow: true,
   show_listening: true,
   show_audio: true,
   show_video: true,
@@ -275,7 +277,9 @@ const DEFAULTS = {
   warming_color: '',
 };
 const SECTIONS = [
-  ['show_status', 'Status (power → source → format → video) and tags'],
+  ['show_status', 'Status area (both flows and the tags)'],
+  ['show_audio_flow', 'Status: audio flow (source → processing → output)'],
+  ['show_video_flow', 'Status: video flow (input → signal → color)'],
   ['show_listening', 'Listening section (source, preset, volume, mute, surround modes)'],
   ['show_audio', 'Audio section (Dolby / Auro / SphereAudio, trims, enhances)'],
   ['show_video', 'Video section (resolution, encoding, color, HDMI)'],
@@ -523,6 +527,8 @@ const CARD_CSS = `
 .sa-pwr2:hover { background: color-mix(in srgb, var(--sa-ctx) 20%, transparent); }
 .sa-standby { padding: 2px 0 2px var(--sa-standby-indent, 46px); font-size: var(--sa-secondary-size, 13px); color: var(--sa-secondary-color, var(--secondary-text-color)); }
 .sa-chain { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr); gap: 6px; margin-top: 10px; }
+.sa-chain + .sa-chain { margin-top: 6px; }
+.sa-box-s.warn { color: var(--warning-color, #ff9800); }
 .sa-box { min-width: 0; padding: 8px 6px; border-radius: 10px; text-align: center; background: var(--sa-box); }
 .sa-box-h { font-size: var(--sa-subtitle-size, 10px); letter-spacing: .08em; text-transform: uppercase; color: var(--sa-subtitle-color, var(--secondary-text-color)); }
 .sa-box-t { font-size: var(--sa-text-size, 14px); font-weight: 600; color: var(--sa-text-color, var(--primary-text-color));
@@ -681,7 +687,8 @@ class StormAudioCard extends HTMLElement {
         <div class="sa-standby" data-k="standby" hidden>${standbyText}</div>
         <div class="sa-body" data-k="body">
           <div data-sec="status">
-            <div class="sa-chain">${box('src', 'Source')}${arrow}${box('fmt', 'Format')}${arrow}${box('vid', 'Video')}</div>
+            <div class="sa-chain" data-k="aflow">${box('ain', 'Source audio')}${arrow}${box('aproc', 'Processing')}${arrow}${box('aout', 'Output', true)}</div>
+            <div class="sa-chain" data-k="vflow">${box('vin', 'Video in')}${arrow}${box('vsig', 'Signal')}${arrow}${box('vcol', 'Color')}</div>
             <div class="sa-tags" data-k="tags"></div>
           </div>
           ${fold('listening', 'Listening', `
@@ -976,24 +983,47 @@ class StormAudioCard extends HTMLElement {
       el.hidden = !show;
     });
 
-    // status boxes: source › format › video
-    set('src_t', source || '—');
-    set('src_1', nice(v('surround_mode'), SURROUND_MODE) || '—');
-    set('src_2', pretty(DOLBY_MODE, this._currentOption('dolby_mode')) || '—');
-    set('fmt_t', nice(v('stream_type')) || '—');
-    set('fmt_1', nice(v('channel_format')) || '—');
-    set('fmt_2', nice(v('sample_rate')) || '—');
+    // audio flow: what the source sends › what the processor does › what plays
+    const sm = st('surround_mode');
+    const engaged = sm && sm.attributes ? sm.attributes.engaged : undefined;
+    set('ain_t', nice(v('stream_type')) || '—');
+    set('ain_1', nice(v('channel_format')) || '—');
+    set('ain_2', [nice(v('sample_rate')), source].filter(Boolean).join(' · ') || '—');
+    set('aproc_t', nice(v('surround_mode'), SURROUND_MODE) || '—');
+    const effects = [
+      ['Dolby', pretty(DOLBY_MODE, this._currentOption('dolby_mode')), 'Off'],
+      ['Sphere', nice(this._currentOption('sphereaudio'), SPHERE_EFFECT), 'Bypass'],
+      ['Auro', nice(this._currentOption('auro_preset'), AURO_PRESET), ''],
+    ].filter(([, val, off]) => val && val !== off).map(([n, val]) => `${n} ${val}`);
+    // engaged === false: the selected upmixer can't run on this content; the processor plays it another way.
+    set('aproc_1', engaged === false ? 'Not engaged with this source' : (effects[0] || (v('stormxt') === 'on' ? 'StormXT' : '—')));
+    if (K.aproc_1) K.aproc_1.classList.toggle('warn', engaged === false);
+    set('aproc_2', (engaged === false ? effects[0] : effects[1]) || '—');
+    set('aout_t', nice(v('active_speaker')) || '—');
+    const volNow = this._numState('volume');
+    const volPct = volNow.value === null ? null : ((volNow.value - volNow.min) / Math.max(1, volNow.max - volNow.min)) * 100;
+    const vw = `${Math.max(0, Math.min(100, volPct || 0)).toFixed(1)}%`;
+    if (K.vol_bar && K.vol_bar.style.width !== vw) K.vol_bar.style.width = vw;
+    set('aout_2', v('mute') === 'on' ? 'Muted' : (volNow.value === null ? '—' : `Volume ${fmtNum(volNow.value, { unit: volNow.unit })}`));
+    // video flow: input › signal › color
     const res = v('video_resolution');
     const rate = v('video_refresh');
-    set('vid_t', okState(res) ? (okState(rate) ? `${res}` : res) : '—');
-    set('vid_1', okState(rate) ? rate : (okState(v('video_encoding')) ? v('video_encoding') : '—'));
-    set('vid_2', nice(v('video_colorspace')) || '—');
+    set('vin_t', source || '—');
+    set('vin_1', nice(v('video_input')) || '—');
+    set('vin_2', nice(v('video_cp')) || nice(v('video_sync')) || '—');
+    set('vsig_t', okState(res) ? res : '—');
+    set('vsig_1', okState(rate) ? rate : '—');
+    set('vsig_2', nice(v('video_encoding')) || '—');
+    set('vcol_t', nice(v('video_colorspace')) || '—');
+    set('vcol_1', nice(v('video_colordepth')) || '—');
+    set('vcol_2', nice(v('video_mode')) || '—');
+    if (K.aflow) K.aflow.hidden = !cfg(c, 'show_audio_flow') || !(E.stream_type || E.surround_mode || E.active_speaker);
+    if (K.vflow) K.vflow.hidden = !cfg(c, 'show_video_flow') || !(E.video_resolution || E.video_encoding || E.video_colorspace);
 
     // tags
     const tags = [];
     if (isDown) tags.push(['LINK DOWN', 'bad']);
     if (isOn && v('mute') === 'on') tags.push(['MUTED', 'bad']);
-    const sm = st('surround_mode');
     if (isOn && sm && sm.attributes && sm.attributes.engaged === true) tags.push(['STORM', 'ctx']);
     if (isOn && v('stormxt') === 'on') tags.push(['STORMXT', 'ctx']);
     if (isOn && okState(v('video_encoding')) && /hdr|dolby|hlg/i.test(v('video_encoding'))) tags.push([String(v('video_encoding')).toUpperCase(), 'ctx']);

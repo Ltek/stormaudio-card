@@ -1,5 +1,12 @@
 # Changelog
 
+## v2026.10.14.4
+
+- Status is now two flows that can each be hidden (`show_audio_flow`, `show_video_flow`; Card & sections in the editor):
+  - **Audio:** Source audio (stream type, channel format, sample rate, input) › Processing (surround mode, then Dolby mode / SphereAudio / Auro when on; "Not engaged with this source" in orange when the selected upmixer can't run on the content) › Output (active speaker layout, volume bar, volume or Muted).
+  - **Video:** Video in (input, HDMI port, copy protection) › Signal (resolution, refresh rate, HDR) › Color (color space, depth, mode).
+- Replaces the Source › Format › Video row.
+
 ## v2026.10.14.3
 
 - Fix: on a real Home Assistant only the source showed; every other box, row and section stayed empty. The card matched entities by their unique ID, which Home Assistant doesn't give Dashboard cards. It now reads the unique IDs from the entity registry, and until then (or if that isn't allowed) matches the integration's default entity IDs (`sensor.stormaudio_isp_stream_type`…).
