@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.14.4
+// Version: v2026.10.14.5
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.14.4';
+const BUILD_NUMBER = 'v2026.10.14.5';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -265,7 +265,11 @@ const DEFAULTS = {
   show_audio_flow: true,
   show_video_flow: true,
   show_listening: true,
+  show_volume: true,
+  volume_collapsible: false,
+  show_speaker_layout: false,
   show_audio: true,
+  show_decoding: true,
   show_video: true,
   show_zones: true,
   show_triggers: true,
@@ -280,8 +284,12 @@ const SECTIONS = [
   ['show_status', 'Status area (both flows and the tags)'],
   ['show_audio_flow', 'Status: audio flow (source → processing → output)'],
   ['show_video_flow', 'Status: video flow (input → signal → color)'],
-  ['show_listening', 'Listening section (source, preset, volume, mute, surround modes)'],
-  ['show_audio', 'Audio section (Dolby / Auro / SphereAudio, trims, enhances)'],
+  ['show_speaker_layout', 'Audio flow: show the speaker layout (e.g. 7.1.4) under Output'],
+  ['show_volume', 'Volume section (slider, Mute, Dim)'],
+  ['volume_collapsible', 'Volume section: collapsible (off = always shown)'],
+  ['show_listening', 'Listening section (source, preset, surround mode)'],
+  ['show_audio', 'Audio section (loudness, trims & enhance, LFE dim)'],
+  ['show_decoding', 'Decoding & effects section (Dolby mode, SphereAudio, Auro, DRC, IMAX, Dolby options)'],
   ['show_video', 'Video section (resolution, encoding, color, HDMI)'],
   ['show_zones', 'Zones section (per-zone volume / mute / EQ — if enabled)'],
   ['show_triggers', 'Triggers section (12V triggers — if enabled)'],
@@ -290,15 +298,17 @@ const SECTIONS = [
 ];
 // Collapsible sections, in card order: [id, label]
 const FOLDS = [
-  ['listening', 'Listening'], ['audio', 'Audio'], ['video', 'Video'],
+  ['volume', 'Volume'], ['listening', 'Listening'], ['audio', 'Audio'], ['decoding', 'Decoding & effects'], ['video', 'Video'],
   ['zones', 'Zones'], ['triggers', 'Triggers'], ['frontpanel', 'Front panel'], ['info', 'Info'],
 ];
 
 // Icons: header (also the power button) and each collapsible section.
 const ICON_DEFAULTS = {
   header: 'mdi:waveform',
+  volume: 'mdi:volume-high',
   listening: 'mdi:surround-sound',
   audio: 'mdi:tune',
+  decoding: 'mdi:dolby',
   video: 'mdi:television',
   zones: 'mdi:speaker-multiple',
   triggers: 'mdi:flash',
@@ -306,7 +316,7 @@ const ICON_DEFAULTS = {
   info: 'mdi:information-outline',
 };
 const ICON_LABELS = {
-  header: 'Header (power button)', listening: 'Listening', audio: 'Audio', video: 'Video',
+  header: 'Header (power button)', volume: 'Volume', listening: 'Listening', audio: 'Audio', decoding: 'Decoding & effects', video: 'Video',
   zones: 'Zones', triggers: 'Triggers', frontpanel: 'Front panel', info: 'Info',
 };
 
@@ -528,6 +538,7 @@ const CARD_CSS = `
 .sa-standby { padding: 2px 0 2px var(--sa-standby-indent, 46px); font-size: var(--sa-secondary-size, 13px); color: var(--sa-secondary-color, var(--secondary-text-color)); }
 .sa-chain { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr); gap: 6px; margin-top: 10px; }
 .sa-chain + .sa-chain { margin-top: 6px; }
+.sa-plain { padding: 6px 0 2px; border-top: 1px solid var(--sa-divider-color, rgba(127,127,127,0.2)); margin-top: 10px; }
 .sa-box-s.warn { color: var(--warning-color, #ff9800); }
 .sa-box { min-width: 0; padding: 8px 6px; border-radius: 10px; text-align: center; background: var(--sa-box); }
 .sa-box-h { font-size: var(--sa-subtitle-size, 10px); letter-spacing: .08em; text-transform: uppercase; color: var(--sa-subtitle-color, var(--secondary-text-color)); }
@@ -691,7 +702,8 @@ class StormAudioCard extends HTMLElement {
             <div class="sa-chain" data-k="vflow">${box('vin', 'Video in')}${arrow}${box('vsig', 'Signal')}${arrow}${box('vcol', 'Color')}</div>
             <div class="sa-tags" data-k="tags"></div>
           </div>
-          ${fold('listening', 'Listening', `
+          ${(() => {
+            const body = `
             <div class="sa-ctl">
               <div class="sa-vollarge">
                 <button class="sa-key" data-tap="vol-step" data-dir="-1" aria-label="Volume down"><ha-icon icon="mdi:minus"></ha-icon></button>
@@ -700,21 +712,31 @@ class StormAudioCard extends HTMLElement {
                 <span class="sa-slider-v" data-k="vol_val"></span>
               </div>
               <div class="sa-toggles" data-k="listen_toggles"></div>
+            </div>`;
+            // Volume is used all the time: a plain, always-open block unless made collapsible.
+            return cfg(c, 'volume_collapsible') ? fold('volume', 'Volume', body) : `<div class="sa-plain" data-sec="volume">${body}</div>`;
+          })()}
+          ${fold('listening', 'Listening', `
+            <div class="sa-ctl">
               ${chipRow('source', 'Source')}
               ${chipRow('preset', 'Preset')}
               ${chipRow('surround', 'Surround')}
             </div>`)}
           ${fold('audio', 'Audio', `
             <div class="sa-ctl">
-              ${chipRow('dolby_mode', 'Dolby')}
-              ${chipRow('sphereaudio', 'SphereAudio')}
-              ${chipRow('auro_preset', 'Auro')}
               ${chipRow('loudness', 'Loudness')}
-              ${chipRow('drc', 'DRC')}
-              ${chipRow('imax_mode', 'IMAX')}
               <div class="sa-group-h">Trims &amp; enhance</div>
               <div data-k="audio_sliders"></div>
               <div class="sa-toggles" data-k="audio_toggles"></div>
+            </div>`)}
+          ${fold('decoding', 'Decoding &amp; effects', `
+            <div class="sa-ctl">
+              ${chipRow('dolby_mode', 'Dolby')}
+              ${chipRow('sphereaudio', 'SphereAudio')}
+              ${chipRow('auro_preset', 'Auro')}
+              ${chipRow('drc', 'DRC')}
+              ${chipRow('imax_mode', 'IMAX')}
+              <div class="sa-toggles" data-k="decoding_toggles"></div>
             </div>`)}
           ${fold('video', 'Video', `
             <div class="sa-info" data-k="video_info"></div>
@@ -975,7 +997,9 @@ class StormAudioCard extends HTMLElement {
       const sec = el.dataset.sec;
       let show = cfg(c, { status: 'show_status' }[sec] || `show_${sec}`);
       if (sec === 'listening') show = show && !!(E.volume || E.source || E.preset);
-      if (sec === 'audio') show = show && !!(E.dolby_mode || E.bass || E.treble || E.sphereaudio);
+      if (sec === 'volume') show = show && !!(E.volume || E.mute || E.dim);
+      if (sec === 'audio') show = show && !!(E.loudness || E.bass || E.treble || E.lfe_dim);
+      if (sec === 'decoding') show = show && !!(E.dolby_mode || E.sphereaudio || E.auro_preset || E.drc || E.imax_mode || E.dolby_virtualizer || E.dialog_norm || E.center_spread);
       if (sec === 'video') show = show && !!(E.video_resolution || E.video_encoding);
       if (sec === 'zones') show = show && zones.length > 0;
       if (sec === 'triggers') show = show && triggers.length > 0;
@@ -989,22 +1013,33 @@ class StormAudioCard extends HTMLElement {
     set('ain_t', nice(v('stream_type')) || '—');
     set('ain_1', nice(v('channel_format')) || '—');
     set('ain_2', [nice(v('sample_rate')), source].filter(Boolean).join(' · ') || '—');
-    set('aproc_t', nice(v('surround_mode'), SURROUND_MODE) || '—');
+    // Processing: what the processor does (native decode, upmix or downmix) and the effects on.
+    // Output: the format it renders — the source's own format, or the upmixer's.
+    const modeRaw = v('surround_mode');
+    const mode = nice(modeRaw, SURROUND_MODE);
+    const isNative = /^native$/i.test(mode);
+    const isDownmix = /downmix/i.test(mode);
+    const upmixing = okState(modeRaw) && !isNative && !isDownmix && engaged !== false;
+    set('aproc_t', !okState(modeRaw) ? '—' : engaged === false || isNative ? 'Native' : isDownmix ? 'Downmix' : 'Upmix');
     const effects = [
       ['Dolby', pretty(DOLBY_MODE, this._currentOption('dolby_mode')), 'Off'],
       ['Sphere', nice(this._currentOption('sphereaudio'), SPHERE_EFFECT), 'Bypass'],
       ['Auro', nice(this._currentOption('auro_preset'), AURO_PRESET), ''],
+      ['Loudness', pretty(LOUDNESS, this._currentOption('loudness')), 'Off'],
     ].filter(([, val, off]) => val && val !== off).map(([n, val]) => `${n} ${val}`);
-    // engaged === false: the selected upmixer can't run on this content; the processor plays it another way.
-    set('aproc_1', engaged === false ? 'Not engaged with this source' : (effects[0] || (v('stormxt') === 'on' ? 'StormXT' : '—')));
+    if (v('stormxt') === 'on') effects.push('StormXT');
+    // engaged === false: the selected upmixer can't run on this content.
+    set('aproc_1', engaged === false ? `${mode} not engaged` : (effects[0] || '—'));
     if (K.aproc_1) K.aproc_1.classList.toggle('warn', engaged === false);
     set('aproc_2', (engaged === false ? effects[0] : effects[1]) || '—');
-    set('aout_t', nice(v('active_speaker')) || '—');
+    set('aout_t', upmixing ? mode : isDownmix ? 'Stereo' : (nice(v('stream_type')) || '—'));
     const volNow = this._numState('volume');
     const volPct = volNow.value === null ? null : ((volNow.value - volNow.min) / Math.max(1, volNow.max - volNow.min)) * 100;
     const vw = `${Math.max(0, Math.min(100, volPct || 0)).toFixed(1)}%`;
     if (K.vol_bar && K.vol_bar.style.width !== vw) K.vol_bar.style.width = vw;
-    set('aout_2', v('mute') === 'on' ? 'Muted' : (volNow.value === null ? '—' : `Volume ${fmtNum(volNow.value, { unit: volNow.unit })}`));
+    const volText = v('mute') === 'on' ? 'Muted' : (volNow.value === null ? '' : `Volume ${fmtNum(volNow.value, { unit: volNow.unit })}`);
+    const layout = cfg(c, 'show_speaker_layout') ? nice(v('active_speaker')) : '';
+    set('aout_2', [layout, volText].filter(Boolean).join(' · ') || '—');
     // video flow: input › signal › color
     const res = v('video_resolution');
     const rate = v('video_refresh');
@@ -1058,9 +1093,10 @@ class StormAudioCard extends HTMLElement {
       ['surround_enhance', 'Surround enh.', true], ['lfe_enhance', 'LFE enh.', true], ['brightness', 'Brightness', true],
       ['dialog_control', 'Dialog', true], ['lipsync', 'LipSync', true], ['auro_strength', 'Auro', false],
     ], E);
-    this._toggles('audio_toggles', [
-      ['dolby_virtualizer', 'Dolby Virt.', 'mdi:surround-sound'], ['dialog_norm', 'Dialog Norm', 'mdi:account-voice'],
-      ['center_spread', 'Center Spread', 'mdi:arrow-expand-horizontal'], ['lfe_dim', 'LFE Dim', 'mdi:subwoofer'],
+    this._toggles('audio_toggles', [['lfe_dim', 'LFE Dim', 'mdi:volume-low']], E);
+    this._toggles('decoding_toggles', [
+      ['dolby_virtualizer', 'Dolby Virtualizer', 'mdi:surround-sound'], ['dialog_norm', 'Dialog Norm', 'mdi:account-voice'],
+      ['center_spread', 'Center Spread', 'mdi:arrow-expand-horizontal'],
     ], E);
 
     // --- Video info ---
@@ -1097,8 +1133,10 @@ class StormAudioCard extends HTMLElement {
 
     // --- peeks on collapsed section headers ---
     const peek = (sec, text) => { const el = this.querySelector(`[data-peek="${sec}"]`); if (el && el.textContent !== text) el.textContent = text; };
-    peek('listening', [source, volShown !== null ? `Vol ${Math.round(volShown)}` : '', v('mute') === 'on' ? 'Muted' : ''].filter(Boolean).join(' · '));
-    peek('audio', [pretty(DOLBY_MODE, this._currentOption('dolby_mode')), nice(this._currentOption('sphereaudio'), SPHERE_EFFECT)].filter(Boolean).join(' · '));
+    peek('listening', [source, nice(v('surround_mode'), SURROUND_MODE)].filter(Boolean).join(' · '));
+    peek('audio', okState(this._currentOption('loudness')) && this._currentOption('loudness') !== 'Off' ? `Loudness ${pretty(LOUDNESS, this._currentOption('loudness'))}` : '');
+    peek('decoding', [pretty(DOLBY_MODE, this._currentOption('dolby_mode')), nice(this._currentOption('sphereaudio'), SPHERE_EFFECT)].filter(Boolean).join(' · '));
+    peek('volume', [volShown !== null ? `Vol ${Math.round(volShown)}` : '', v('mute') === 'on' ? 'Muted' : ''].filter(Boolean).join(' · '));
     peek('video', okState(res) ? `${res}${okState(rate) ? ' · ' + rate : ''}` : '');
     peek('zones', zones.length ? `${zones.length} zone${zones.length > 1 ? 's' : ''}` : '');
     peek('triggers', triggers.length ? `${triggers.length} trigger${triggers.length > 1 ? 's' : ''}` : '');
@@ -1155,6 +1193,8 @@ class StormAudioCard extends HTMLElement {
     const hidden = new Set((hideKey && this._config[hideKey]) || []);
     const all = (state && state.attributes && state.attributes.options) || [];
     const options = all.filter((o) => !hidden.has(String(o)));
+    // No options (unlicensed SphereAudio / Auro, entity unavailable): hide the row instead of an empty label.
+    if (row) row.hidden = options.length === 0;
     const sig = JSON.stringify([entityId, options, name]);
     const swatch = name === 'fp_color';
     if (this._optSig[name] !== sig) {

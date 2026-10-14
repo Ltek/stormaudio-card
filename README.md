@@ -2,7 +2,7 @@
 
 A Home Assistant Dashboard **custom card** for **StormAudio / Focal / Bryston processors** (ISP / ISR series, Focal Astral 16, Bryston SP4): power, source, audio format and video status at a glance, plus collapsible sections for listening, audio processing, video info, zones, 12V triggers, the front panel and full device info — all in one card with a visual editor. Same design as the [JVC Projector Card](https://github.com/Ltek/jvc-projector-card) and [Lumagen Card](https://github.com/Ltek/lumagen-card).
 
-Current build: **v2026.10.14.4** · full history in [CHANGELOG.md](CHANGELOG.md)
+Current build: **v2026.10.14.5** · full history in [CHANGELOG.md](CHANGELOG.md)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ltek&repository=stormaudio-card&category=plugin)
 
@@ -17,7 +17,7 @@ Status sits on top. **Every control is in a collapsed section**, so nothing chan
 ```
  〜  StormAudio ●                       HDMI 1 · Dolby Surround · Dolby Atmos
  ┌ SOURCE AUDIO ┐   ┌ PROCESSING ────┐   ┌ OUTPUT ────┐
- │ Dolby Atmos  │ › │ Dolby Surround │ › │ 7.1.4      │
+ │ Dolby Atmos  │ › │ Native         │ › │ Dolby Atmos│
  │ 7.1.4        │   │ Dolby Movie    │   │ ▬▬▬▬░░░░░  │
  │ 48 kHz·HDMI 1│   │ Sphere Lounge  │   │ Volume 42  │
  └──────────────┘   └────────────────┘   └────────────┘
@@ -27,8 +27,10 @@ Status sits on top. **Every control is in a collapsed section**, so nothing chan
  │ HDCP 2.3     │   │ HDR10          │   │ —          │
  └──────────────┘   └────────────────┘   └────────────┘
  [STORM] [STORMXT] [HDR10]
- ◉ Listening  HDMI 1 · Vol 42                      ›
- ♪ Audio      Movie · Bypass                       ›
+ ─  [−] ━━━━━━━━●━━━━━━━━ [+]  42   [Mute] [Dim]
+ ◉ Listening  HDMI 1 · Native                      ›
+ ♪ Audio      Loudness Low                         ›
+ ▤ Decoding & effects  Movie · Lounge              ›
  ▣ Video      3840x2160 · 60Hz                     ›
  ⌁ Zones      2 zones                              ›
  ⚡ Triggers   1 trigger                            ›
@@ -39,10 +41,12 @@ Status sits on top. **Every control is in a collapsed section**, so nothing chan
 - **Header** — the icon is the power button: tap to toggle the processor on / standby. It shows the power state (context color when on; orange and pulsing while it is starting up or shutting down). The dot is the link: green = the integration reaches the processor, red = it can't; the summary then reads *Offline* in red.
 - **Standby** — the card shrinks to its header instead of disappearing, so you can power on from it. Put the "Standby · tap the icon to power on" message below the title, inline, or hidden; or show a power button on the right. Optionally hide the card in standby (it always shows while you edit the Dashboard).
 - **Collapse** — optionally tap the header to collapse the card to just the header while the processor is on, and start collapsed.
-- **Status** — two flows, each can be hidden on its own. **Audio:** Source audio (what the source sends: stream type, channel format, sample rate, input) › Processing (what the processor does with it: surround mode, Dolby mode / SphereAudio / Auro; shows *Not engaged with this source* in orange when the chosen upmixer can't run on this content) › Output (active speaker layout, volume bar, Muted). **Video:** Video in (input, HDMI port, copy protection) › Signal (resolution, refresh rate, HDR) › Color (color space, depth, mode). Video input, sync, copy protection and mode are integration sensors that are disabled by default; enable them to fill those lines.
+- **Status** — two flows, each can be hidden on its own. **Audio:** Source audio (the encoding the source sends — Dolby Atmos, DTS:X, PCM… — plus channel format, sample rate and input) › Processing (*Native*, *Upmix* or *Downmix*, then the effects that are on: Dolby mode, SphereAudio, Auro, Loudness, StormXT; *"<mode> not engaged"* in orange when the chosen upmixer can't run on this content) › Output (the encoding the processor renders — the source's own format when decoding natively, the upmixer such as Dolby Surround or Auro-Matic when upmixing — with a volume bar and the volume or Muted; the speaker layout, e.g. 7.1.4, is optional: `show_speaker_layout`). **Video:** Video in (input, HDMI port, copy protection) › Signal (resolution, refresh rate, HDR) › Color (color space, depth, mode). Video input, sync, copy protection and mode are integration sensors that are disabled by default; enable them to fill those lines.
 - **Tags** appear only when active: MUTED, STORM (surround mode engaged), STORMXT, the video encoding (HDR10 / Dolby Vision / HLG…), DIM, LINK DOWN.
-- **Listening** — a large volume slider with − / +, Mute / Dim pills, and source, preset and surround-mode chips.
-- **Audio** — Dolby mode, SphereAudio, Auro, Loudness, DRC, IMAX chips; trim / enhance sliders (Bass, Treble, Center / Surround / LFE enhance, Brightness, Dialog, LipSync, Auro strength); Dolby Virtualizer / Dialog Norm / Center Spread / LFE Dim pills.
+- **Volume** — a large volume slider with − / + and Mute / Dim pills, always shown under the status (not a collapsible section). Set `volume_collapsible: true` to make it one.
+- **Listening** — source, preset and surround-mode chips.
+- **Audio** — the settings used most: Loudness, then trim / enhance sliders (Bass, Treble, Center / Surround / LFE enhance, Brightness, Dialog, LipSync, Auro strength) and LFE Dim.
+- **Decoding & effects** — Dolby mode, SphereAudio, Auro preset, DRC and IMAX chips, and Dolby Virtualizer / Dialog Norm / Center Spread. A setting with nothing to choose (for example SphereAudio without its license) is hidden.
 - **Video** — resolution, refresh, encoding, color space / depth, mode, input, sync, copy protection (whichever sensors are enabled).
 - **Zones** — per-zone volume, mute, EQ and binaural mode, discovered automatically from the device's zone list. Appears only if you have enabled the per-zone entities.
 - **Triggers** — the 12V triggers, as on / off pills, discovered automatically. Appears only if you have enabled the trigger entities.
@@ -96,12 +100,14 @@ Everything is in the visual editor (Device · Card & sections · Chips · Icons 
 | `volume_step` | `1` | How much − / + change the volume (1–20). |
 | `collapsible` | `false` | Tap the header to collapse the card to just the header while on. |
 | `start_collapsed` | `false` | With `collapsible`, start collapsed. |
-| `open_sections` | | Sections already open when the Dashboard loads: `listening`, `audio`, `video`, `zones`, `triggers`, `frontpanel`, `info`. |
+| `open_sections` | | Sections already open when the Dashboard loads: `volume` (with `volume_collapsible`), `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info`. |
 | `hide_sources` · `hide_presets` · `hide_dolby` · `hide_sphere` | | Chips to hide, by the integration's value. The editor's **Chips** panel lists them. |
 | `show_audio_flow` · `show_video_flow` | `true` | The two status flows: **audio** (source audio › processing › output — what the source sends, what the processor does with it, what plays) and **video** (input › signal › color). `show_status` hides both and the tags. |
-| `show_status` · `show_listening` · `show_audio` · `show_video` · `show_zones` · `show_triggers` · `show_frontpanel` · `show_info` | `true` | Turn parts off (empty sections hide themselves regardless). |
+| `volume_collapsible` | `false` | `false`: the Volume block is always shown. `true`: it is a collapsible section like the others. |
+| `show_speaker_layout` | `false` | Show the speaker layout (e.g. 7.1.4) in the audio flow's Output box. |
+| `show_status` · `show_volume` · `show_listening` · `show_audio` · `show_decoding` · `show_video` · `show_zones` · `show_triggers` · `show_frontpanel` · `show_info` | `true` | Turn parts off (empty sections hide themselves regardless). |
 | `accent_color` · `warming_color` | theme primary · orange | Context colors. |
-| `icons:` | | `header`, `listening`, `audio`, `video`, `zones`, `triggers`, `frontpanel`, `info` — any MDI name; `mdi:` is optional. |
+| `icons:` | | `header`, `volume`, `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info` — any MDI name; `mdi:` is optional. |
 | `styles:` | | Sizes (px) and colors (any CSS color or theme variable) — see below. |
 
 **`styles:` keys** — sizes: `card_radius` `card_padding` `standby_indent` `header_icon_size` `title_size` `summary_size` `section_icon_size` `section_title_size` `subtitle_size` `text_size` `secondary_size` `chip_size` `icon_size`; colors: `card_background` `card_border_color` `box_background` `divider_color` `header_icon_color` `title_color` `summary_color` `section_icon_color` `section_title_color` `subtitle_color` `text_color` `secondary_color` `chip_color` `chip_background` `chip_border_color` `icon_color`.

@@ -1,5 +1,15 @@
 # Changelog
 
+## v2026.10.14.5
+
+- **Volume** is its own block (slider, − / +, Mute, Dim) right under the status, always shown. `volume_collapsible: true` makes it a collapsible section instead.
+- **Audio flow shows the encoding at input and output.** Source audio: what the source sends (Dolby Atmos, DTS:X, PCM…). Processing: *Native*, *Upmix* or *Downmix*, plus the effects that are on (Dolby mode, SphereAudio, Auro, Loudness, StormXT). Output: what the processor renders — the source's format when decoding natively, the upmixer (Dolby Surround, DTS Neural:X, Auro-Matic) when upmixing, Stereo for a downmix — with the volume.
+- The speaker layout (7.1.4) under Output is now optional: `show_speaker_layout` (off by default).
+- **Audio** section is now the everyday settings: Loudness, trims & enhance, LFE Dim. Dolby mode, SphereAudio, Auro preset, DRC, IMAX and the Dolby Virtualizer / Dialog Norm / Center Spread options moved to a new **Decoding & effects** section (`show_decoding`).
+- A setting with no options (e.g. SphereAudio without its license) no longer leaves an empty labelled row.
+- LFE Dim had no icon.
+- Listening's collapsed header shows source and surround mode (volume has its own block).
+
 ## v2026.10.14.4
 
 - Status is now two flows that can each be hidden (`show_audio_flow`, `show_video_flow`; Card & sections in the editor):
