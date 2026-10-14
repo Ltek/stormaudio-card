@@ -1,5 +1,9 @@
 # Changelog
 
+## v2026.10.14.2
+
+- Fix: the card could stay on "Starting up…" after the processor had finished booting. The processor's main state stays "on" while it boots and only its detailed state changes, which the card didn't notice until something else changed.
+
 ## v2026.10.13.1
 
 First release. Same design as the JVC Projector and Lumagen cards.

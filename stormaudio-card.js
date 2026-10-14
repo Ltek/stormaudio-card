@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.13.1
+// Version: v2026.10.14.2
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.13.1';
+const BUILD_NUMBER = 'v2026.10.14.2';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -866,7 +866,9 @@ class StormAudioCard extends HTMLElement {
     const sig = JSON.stringify(Object.keys(ENTITY_KEYS).map((k) => {
       const s = st(k);
       return s ? [s.state, s.attributes.options, s.attributes.min, s.attributes.max] : null;
-    })) + JSON.stringify(this._pending) + JSON.stringify([zones.map((z) => z.id), triggers.map((t) => t.id)]);
+    })) + JSON.stringify(this._pending) + JSON.stringify([zones.map((z) => z.id), triggers.map((t) => t.id)])
+      // The media_player's state stays 'on' while it boots; only these attributes change.
+      + JSON.stringify(((m) => (m ? [m.attributes.detailed_state, m.attributes.source] : null))(st('media')));
     if (!force && sig === this._sig) return;
     this._sig = sig;
 
