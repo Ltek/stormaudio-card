@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.14.2
+// Version: v2026.10.14.3
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.14.2';
+const BUILD_NUMBER = 'v2026.10.14.3';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -92,6 +92,47 @@ const OPTIONAL_ENTITIES = {
   auro_preset: 'Auro Preset', auro_strength: 'Auro Strength',
 };
 
+// Entity-ID name parts that differ from the unique_id suffix (the integration names entities
+// "<device> <Name>", so HA's default entity_id is <domain>.<device_slug>_<name_slug>).
+const NAME_SLUGS = {
+  _active_speaker: '_active_speaker_config',
+  _source_zone2: '_source_zone_2',
+  _frontpanel_standby_brightness: '_front_panel_standby_brightness',
+  _frontpanel_active_brightness: '_front_panel_active_brightness',
+  _frontpanel_standby_delay: '_front_panel_standby_delay',
+  _frontpanel_color: '_front_panel_color',
+  _video_colorspace: '_video_color_space',
+  _video_colordepth: '_video_color_depth',
+};
+
+// HA's frontend entity list (hass.entities) has no unique_id, so the card reads it once from the
+// entity registry (config/entity_registry/list) and keeps entity_id → unique_id here.
+const REGISTRY = { conn: null, key: '', uid: new Map(), pending: null };
+
+/** Fetch unique_ids for this integration's entities (once per connection / entity set). */
+function loadUniqueIds(hass, onDone) {
+  if (!hass || typeof hass.callWS !== 'function') return;
+  const ids = Object.values(hass.entities || {}).filter((e) => e.platform === PLATFORM).map((e) => e.entity_id).sort();
+  const key = ids.join(',');
+  if (REGISTRY.conn === hass.connection && REGISTRY.key === key) return;
+  if (REGISTRY.pending) return;
+  REGISTRY.pending = Promise.resolve(hass.callWS({ type: 'config/entity_registry/list' }))
+    .then((list) => {
+      REGISTRY.uid = new Map((list || []).filter((e) => e.platform === PLATFORM && e.unique_id).map((e) => [e.entity_id, e.unique_id]));
+    })
+    .catch(() => { /* not allowed or unavailable: entity_id matching still works */ })
+    .finally(() => {
+      REGISTRY.conn = hass.connection; REGISTRY.key = key; REGISTRY.pending = null;
+      if (onDone) onDone();
+    });
+}
+
+/** This integration's entities from hass.entities, with unique_id filled in when known. */
+function platformEntities(hass) {
+  return Object.values((hass && hass.entities) || {}).filter((e) => e.platform === PLATFORM)
+    .map((e) => (e.unique_id || !REGISTRY.uid.has(e.entity_id) ? e : { ...e, unique_id: REGISTRY.uid.get(e.entity_id) }));
+}
+
 /** StormAudio processors known to HA: [{id, name}] (from the entity registry). */
 function listDevices(hass) {
   const seen = new Map();
@@ -110,7 +151,7 @@ function listDevices(hass) {
 function resolveEntities(hass, deviceId) {
   const out = {};
   if (!hass) return out;
-  const all = Object.values(hass.entities || {}).filter((e) => e.platform === PLATFORM);
+  const all = platformEntities(hass);
   const dev = deviceId || (all.find((e) => e.device_id) || {}).device_id;
   const mine = all.filter((e) => !dev || e.device_id === dev);
   // The media_player's unique_id IS the device unique_id (no suffix) — our prefix.
@@ -132,6 +173,12 @@ function resolveEntities(hass, deviceId) {
         && e.entity_id.startsWith(domain + '.')
         && !ENTITY_ORDER.some(([k2, [, s2]]) => k2 !== key && s2.length > suffix.length && e.unique_id.endsWith(s2)));
       if (cand) hit = cand.entity_id;
+    }
+    if (!hit && player) {
+      // No unique_id (registry not loaded yet, or not readable): HA's default entity_id,
+      // <domain>.<media_player object id><name slug>.
+      const guess = `${domain}.${player.entity_id.slice('media_player.'.length)}${NAME_SLUGS[suffix] || suffix}`;
+      if (mine.some((e) => e.entity_id === guess)) hit = guess;
     }
     if (hit) out[key] = hit;
   });
@@ -583,6 +630,7 @@ class StormAudioCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    loadUniqueIds(hass, () => { if (this._built) this._update(true); });
     if (!this._built) this._build();
     else this._schedule();
   }
@@ -1160,7 +1208,7 @@ class StormAudioCard extends HTMLElement {
 
   // -- dynamic zones / triggers ----------------------------------------------
   _entitiesForDevice(hass, deviceId) {
-    const all = Object.values(hass.entities || {}).filter((e) => e.platform === PLATFORM);
+    const all = platformEntities(hass);
     const dev = deviceId || (all.find((e) => e.device_id) || {}).device_id;
     return all.filter((e) => !dev || e.device_id === dev);
   }
@@ -1444,6 +1492,7 @@ class StormAudioCardEditor extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    loadUniqueIds(hass, () => { if (this._hass) this._render(); });
     if (first || !this._rendered) this._render();
   }
 
@@ -1682,7 +1731,7 @@ class StormAudioCardEditor extends HTMLElement {
 // Test hooks (pure helpers; no effect in the browser)
 StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
-  normalizeConfig, normalizeIcon, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
+  normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
 };
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2026.10.14.3
+
+- Fix: on a real Home Assistant only the source showed; every other box, row and section stayed empty. The card matched entities by their unique ID, which Home Assistant doesn't give Dashboard cards. It now reads the unique IDs from the entity registry, and until then (or if that isn't allowed) matches the integration's default entity IDs (`sensor.stormaudio_isp_stream_type`…).
+
 ## v2026.10.14.2
 
 - Fix: the card could stay on "Starting up…" after the processor had finished booting. The processor's main state stays "on" while it boots and only its detailed state changes, which the card didn't notice until something else changed.
