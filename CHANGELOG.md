@@ -1,5 +1,9 @@
 # Changelog
 
+## v2026.10.15.8
+
+- **Every section can be moved, the status area included** (Card & sections → Sections, ↑ / ↓ on the Status row too). YAML: `section_order` now includes `status`. An order saved by v2026.10.15.6 / .7 (without `status`) keeps status on top.
+
 ## v2026.10.15.7
 
 - **Eye icons instead of checkboxes** for show/hide, per the design guide (same as the Lumagen and JVC cards). The **Sections** list is now one row per section — its icon, name, ↑ / ↓, **Open** (start open) and an eye. The status row stays pinned on top and carries eyes for the audio flow, video flow and channel layout; Volume's row has a **Collapsible** toggle (and Open once it is collapsible). The separate "Other section options" and "Start open" lists are gone. The **Chips** panel uses an eye per chip. Hidden rows are dimmed; **Reset to default order** appears once the order changes.

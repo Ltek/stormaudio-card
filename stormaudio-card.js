@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.7
+// Version: v2026.10.15.8
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.7';
+const BUILD_NUMBER = 'v2026.10.15.8';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -301,6 +301,7 @@ const FOLDS = [
   ['zones', 'Zones'], ['triggers', 'Triggers'], ['frontpanel', 'Front panel'], ['info', 'Info'],
 ];
 // Each reorderable fold's show_* key (toggles the whole section on / off).
+const SECTION_IDS = ['status', ...FOLDS.map(([id]) => id)];
 const FOLD_SHOW = {
   volume: 'show_volume', listening: 'show_listening', audio: 'show_audio', decoding: 'show_decoding',
   video: 'show_video', zones: 'show_zones', triggers: 'show_triggers', frontpanel: 'show_frontpanel', info: 'show_info',
@@ -440,12 +441,10 @@ function normalizeConfig(raw) {
   });
   const open = strList(c.open_sections).filter((s) => FOLDS.some(([id]) => id === s));
   if (open.length) out.open_sections = FOLDS.map(([id]) => id).filter((id) => open.includes(id));
-  // Section order: a full list of the body sections; only emitted when it differs from the default.
-  const defOrder = FOLDS.map(([id]) => id);
-  const want = strList(c.section_order).filter((s) => defOrder.includes(s));
-  if (want.length) {
-    const full = [...want, ...defOrder.filter((id) => !want.includes(id))];
-    if (JSON.stringify(full) !== JSON.stringify(defOrder)) out.section_order = full;
+  // Section order: a full list of every section (status included); only emitted when it differs from the default.
+  if (strList(c.section_order).length) {
+    const full = orderedSections(c);
+    if (JSON.stringify(full) !== JSON.stringify(SECTION_IDS)) out.section_order = full;
   }
   const known = ['type', 'icons', 'styles', 'open_sections', 'section_order'];
   Object.keys(c).forEach((k) => {
@@ -462,12 +461,18 @@ function iconFor(config, key) {
   return (config.icons && config.icons[key]) || ICON_DEFAULTS[key];
 }
 
-/** The body sections ([id, label]) in the configured order, defaults filling any gaps. */
+/** Every section id (status + the folds) in the configured order, defaults filling any gaps.
+ *  A saved order without 'status' (made before status could move) keeps status on top. */
+function orderedSections(config) {
+  const want = strList(config.section_order).filter((id) => SECTION_IDS.includes(id));
+  if (want.length && !want.includes('status')) want.unshift('status');
+  return [...want, ...SECTION_IDS.filter((id) => !want.includes(id))];
+}
+
+/** The collapsible / body sections ([id, label]) in the configured order (status left out). */
 function orderedFolds(config) {
-  const want = Array.isArray(config.section_order) ? config.section_order.filter((id) => FOLDS.some(([f]) => f === id)) : [];
-  const ids = [...want, ...FOLDS.map(([id]) => id).filter((id) => !want.includes(id))];
   const byId = Object.fromEntries(FOLDS);
-  return ids.map((id) => [id, byId[id]]);
+  return orderedSections(config).filter((id) => id !== 'status').map((id) => [id, byId[id]]);
 }
 
 /** Per-card custom properties (inline on the card root; never in the stylesheet). */
@@ -760,12 +765,15 @@ class StormAudioCard extends HTMLElement {
         </div>
         <div class="sa-standby" data-k="standby" hidden>${standbyText}</div>
         <div class="sa-body" data-k="body">
-          <div data-sec="status">
+          ${orderedSections(c).map((id) => {
+            if (id === 'status') {
+              return `<div data-sec="status">
             <div class="sa-chain" data-k="aflow">${box('ain', 'Source audio')}${arrow}${box('aproc', 'Processing')}${arrow}${box('aout', 'Output', true)}</div>
             <div class="sa-chain" data-k="vflow">${box('vin', 'Video in')}${arrow}${box('vsig', 'Signal')}${arrow}${box('vcol', 'Color')}</div>
             <div class="sa-tags" data-k="tags"></div>
-          </div>
-          ${orderedFolds(c).map(([id, label]) => {
+          </div>`;
+            }
+            const label = Object.fromEntries(FOLDS)[id];
             // Volume is used all the time: a plain, always-open block unless made collapsible.
             if (id === 'volume') {
               const body = `
@@ -1588,8 +1596,6 @@ const EDITOR_CSS = `
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .sae-sctl { display: flex; gap: var(--ltek-sp-3); flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-end; }
         .sae-open-gap { flex: 0 0 52px; }
-        .sae-pin { display: flex; justify-content: center; flex: 0 0 calc(var(--ltek-icon-sm) * 2 + 52px + var(--ltek-sp-2) * 2); color: var(--ltek-c-muted);
-          --mdc-icon-size: var(--ltek-icon-sm); }
         .sae-preset { padding: 3px 8px; border: 1px solid var(--ltek-c-border); border-radius: var(--ltek-r-ctrl); background: transparent;
           color: var(--ltek-c-text); font-size: var(--ltek-fs-small); cursor: pointer; }
         .sae-preset:hover { border-color: var(--ltek-c-accent); }
@@ -1695,23 +1701,27 @@ class StormAudioCardEditor extends HTMLElement {
   }
 
   /** The section list (design system "section rows"): icon, name, sub-option eyes, ↑ / ↓, start open, eye.
-   *  Status is pinned on top (no arrows); every other section can be moved. */
+   *  Every section, status included, can be moved. */
   _sectionsControl() {
     const c = this._config;
-    const folds = orderedFolds(c);
-    const last = folds.length - 1;
+    const order = orderedSections(c);
+    const last = order.length - 1;
+    const byId = Object.fromEntries(FOLDS);
     const openSecs = c.open_sections || [];
     const move = (id, dir, disabled, label) => `<button class="sae-act" data-move="${dir < 0 ? 'up' : 'down'}" data-id="${id}"${disabled ? ' disabled' : ''}
       aria-label="Move ${esc(label)} ${dir < 0 ? 'up' : 'down'}" title="Move ${dir < 0 ? 'up' : 'down'}"><ha-icon icon="mdi:arrow-${dir < 0 ? 'up' : 'down'}"></ha-icon></button>`;
     const statusOn = cfg(c, 'show_status');
-    const status = `<div class="sae-srow${statusOn ? '' : ' off'}" data-section="status">
+    const status = (i) => `<div class="sae-srow${statusOn ? '' : ' off'}" data-section="status">
         <ha-icon class="sae-sicon" icon="mdi:transit-connection-variant"></ha-icon>
-        <span class="sae-sname" title="Pinned on top">Status</span>
+        <span class="sae-sname">Status</span>
         <span class="sae-sctl">${eyeToggle(`data-eye="show_audio_flow"${statusOn ? '' : ' disabled'}`, cfg(c, 'show_audio_flow'), 'Audio flow')}${eyeToggle(`data-eye="show_video_flow"${statusOn ? '' : ' disabled'}`, cfg(c, 'show_video_flow'), 'Video flow')}${eyeToggle(`data-eye="show_speaker_layout"${statusOn && cfg(c, 'show_audio_flow') ? '' : ' disabled'}`, cfg(c, 'show_speaker_layout'), 'Layout', 'channel layout under Output')}</span>
-        <span class="sae-pin" title="Always on top"><ha-icon icon="mdi:pin-outline"></ha-icon></span>
+        ${move('status', -1, i === 0, 'Status')}${move('status', 1, i === last, 'Status')}
+        <span class="sae-open-gap"></span>
         ${eyeToggle('data-eye="show_status"', statusOn, '', 'status area')}
       </div>`;
-    const rows = folds.map(([id, label], i) => {
+    const rows = order.map((id, i) => {
+      if (id === 'status') return status(i);
+      const label = byId[id];
       const showKey = FOLD_SHOW[id];
       const on = cfg(c, showKey);
       const collapsible = id !== 'volume' || cfg(c, 'volume_collapsible');
@@ -1729,7 +1739,7 @@ class StormAudioCardEditor extends HTMLElement {
         ${eyeToggle(`data-eye="${showKey}"`, on, '', label)}
       </div>`;
     }).join('');
-    return `<div class="sae-slist">${status}${rows}</div>
+    return `<div class="sae-slist">${rows}</div>
       ${c.section_order ? '<div class="sae-row"><button class="sae-preset" data-order-reset>Reset to default order</button></div>' : ''}`;
   }
 
@@ -1800,7 +1810,7 @@ class StormAudioCardEditor extends HTMLElement {
       ${cfg(c, 'collapsible') ? `<label class="sae-check"><input type="checkbox" data-key="start_collapsed"${cfg(c, 'start_collapsed') ? ' checked' : ''}>
         Start collapsed</label>` : ''}
       <div class="sae-group">Sections</div>
-      <p class="sae-hint">The order of the sections on the card (↑ / ↓; the status stays on top), which start open, and the eye to show or hide each one. Sections with no (enabled) entities hide themselves.</p>
+      <p class="sae-hint">The order of the sections on the card (↑ / ↓, the status included), which start open, and the eye to show or hide each one. Sections with no (enabled) entities hide themselves.</p>
       ${this._sectionsControl()}`;
     const iconBody = `
       <p class="sae-hint">Any Material Design icon — type just the name (e.g. <b>waveform</b>); "mdi:" is added for you. Leave empty for the default.</p>
@@ -1884,7 +1894,7 @@ class StormAudioCardEditor extends HTMLElement {
       this._render();
     }));
     this.querySelectorAll('[data-move]').forEach((b) => b.addEventListener('click', () => {
-      const ids = orderedFolds(this._config).map(([id]) => id);
+      const ids = orderedSections(this._config);
       const i = ids.indexOf(b.dataset.id);
       const j = b.dataset.move === 'up' ? i - 1 : i + 1;
       if (i < 0 || j < 0 || j >= ids.length) return;
@@ -1928,7 +1938,7 @@ StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
   normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
-  orderedFolds, channelCount, fmtChannels,
+  orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels,
 };
 
 if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, StormAudioCard);
