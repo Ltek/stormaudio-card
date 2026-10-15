@@ -2,7 +2,7 @@
 
 A Home Assistant Dashboard **custom card** for **StormAudio / Focal / Bryston processors** (ISP / ISR series, Focal Astral 16, Bryston SP4): power, source, audio format and video status at a glance, plus collapsible sections for listening, audio processing, video info, zones, 12V triggers, the front panel and full device info — all in one card with a visual editor. Same design as the [JVC Projector Card](https://github.com/Ltek/jvc-projector-card) and [Lumagen Card](https://github.com/Ltek/lumagen-card).
 
-Current build: **v2026.10.15.11** · full history in [CHANGELOG.md](CHANGELOG.md)
+Current build: **v2026.10.15.12** · full history in [CHANGELOG.md](CHANGELOG.md)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ltek&repository=stormaudio-card&category=plugin)
 
@@ -84,7 +84,7 @@ To show zones, triggers or the front panel, enable those entities in **Settings 
 
 ## Options
 
-Everything is in the visual editor (Device · Card · Sections · Chips · Icons · Appearance). YAML keys are only written when they differ from the default.
+Everything is in the visual editor (Card (with the device picker) · Sections · Chips · Icons · Appearance). YAML keys are only written when they differ from the default.
 
 | Key | Default | Description |
 |---|---|---|
@@ -97,7 +97,7 @@ Everything is in the visual editor (Device · Card · Sections · Chips · Icons
 | `standby_button` | `false` | In standby, replace the right-hand "Standby" with a power button. |
 | `show_dot` | `true` | Show the link dot. |
 | `dot_position` | `title` | `title`, `right`, or `icon` (replaces the header icon; it is still the power button). |
-| `volume_step` | `1` | How much − / + change the volume (1–20). |
+| `volume_step` | `1` | How much − / + change the volume (1–20). Editor: Sections → pencil on **Volume** → Options. |
 | `collapsible` | `false` | Tap the header to collapse the card to just the header while on. |
 | `start_collapsed` | `false` | With `collapsible`, start collapsed. |
 | `open_sections` | | Sections already open when the Dashboard loads: `volume` (with `volume_collapsible`), `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info`. |

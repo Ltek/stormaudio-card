@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.11
+// Version: v2026.10.15.12
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.11';
+const BUILD_NUMBER = 'v2026.10.15.12';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -1930,11 +1930,22 @@ class StormAudioCardEditor extends HTMLElement {
     }
     return `<div class="sae-sedit" data-sedit-panel="${id}">
       <div class="sae-row"><label class="lbl">Name</label><input type="text" data-sname="${id}" value="${esc((c.section_names || {})[id] || '')}" placeholder="${esc(defaultSectionName(id))}"></div>
+      ${this._secOptions(id)}
       <div class="sae-group">Settings</div>
       ${items.length ? `<div class="sae-blist">${rows}</div>` : '<p class="sae-hint">This section is a single block; use its eye to show or hide it.</p>'}
       <div class="sae-group">Merge</div>
       ${merge}
     </div>`;
+  }
+
+  /** Section-specific options shown in its edit panel. */
+  _secOptions(id) {
+    const c = this._config;
+    if (id === 'volume') {
+      return `<div class="sae-group">Options</div>
+      ${this._slider('volume_step', '− / + step', cfg(c, 'volume_step'), 1, 20, 1, '', (n) => `${n}`)}`;
+    }
+    return '';
   }
 
   /** Pencil button for a section row. */
@@ -2030,7 +2041,10 @@ class StormAudioCardEditor extends HTMLElement {
         </select></div>`;
     const sbMode = cfg(c, 'standby_text');
     const cardBody = `
-      <p class="sae-hint">Header title, the power button, what the card does in standby, and collapsing.</p>
+      <p class="sae-hint">The device, the header title, the power button, what the card does in standby, and collapsing.</p>
+      <div class="sae-group">Device</div>
+      ${deviceBody}
+      <div class="sae-group">Header</div>
       <div class="sae-row"><label class="lbl">Title</label><input type="text" data-key="title" value="${esc(cfg(c, 'title'))}"></div>
       <label class="sae-check"><input type="checkbox" data-key="strip_prefix"${cfg(c, 'strip_prefix') ? ' checked' : ''}>
         Strip the device name from zone/trigger labels (e.g. "ISP Zone 2" → "Zone 2")</label>
@@ -2051,8 +2065,6 @@ class StormAudioCardEditor extends HTMLElement {
       <p class="sae-hint">Green when the integration reaches the processor, red when it can't.</p>
       <div class="sae-row"><label class="sae-check"><input type="checkbox" data-key="show_dot"${cfg(c, 'show_dot') ? ' checked' : ''}>Show</label>
         ${cfg(c, 'show_dot') ? `<select data-key="dot_position">${DOT_POSITIONS.map(([v, n]) => `<option value="${v}"${v === cfg(c, 'dot_position') ? ' selected' : ''}>${n}</option>`).join('')}</select>` : ''}</div>
-      <div class="sae-group">Volume</div>
-      ${this._slider('volume_step', 'Volume − / + step', cfg(c, 'volume_step'), 1, 20, 1, '', (n) => `${n}`)}
       <div class="sae-group">Collapse</div>
       <label class="sae-check"><input type="checkbox" data-key="collapsible"${cfg(c, 'collapsible') ? ' checked' : ''}>
         Tap the header to collapse the card to just the header (while on)</label>
@@ -2078,7 +2090,6 @@ class StormAudioCardEditor extends HTMLElement {
       ${CONTEXT_COLORS.map(([k, l, d, seed]) => this._colorControl(k, l, d, seed)).join('')}`);
     this.innerHTML = `<style>${EDITOR_CSS}</style>
       <div class="sae">
-        ${this._panel('device', 'mdi:audio-video', 'Device', deviceBody)}
         ${this._panel('card', 'mdi:card-text-outline', 'Card', cardBody)}
         ${this._panel('sections', 'mdi:view-agenda-outline', 'Sections', sectionsBody)}
         ${this._panel('buttons', 'mdi:gesture-tap-button', 'Chips', this._buttonsBody())}

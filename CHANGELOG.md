@@ -1,5 +1,11 @@
 # Changelog
 
+## v2026.10.15.12
+
+- The **Device** picker moved into the **Card** panel (it was a whole panel for one setting).
+- The volume **− / + step** moved from Card to the **Volume** section's options (Sections → pencil on Volume).
+- A section's edit panel (pencil) can now carry options of its own.
+
 ## v2026.10.15.11
 
 - **Sections** is its own top-level panel in the editor (it was at the bottom of *Card & sections*, now just **Card**).
