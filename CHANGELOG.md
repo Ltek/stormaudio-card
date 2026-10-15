@@ -1,5 +1,13 @@
 # Changelog
 
+## v2026.10.15.10
+
+- **Edit a section** — a **pencil** on every row in Card & sections → Sections opens that section's settings under the row:
+  - **Name**: rename the section (`section_names`); the card and the editor use your name.
+  - **Settings**: an eye for each setting in the section (each row, slider, button or status box), so you can hide just the ones you don't use (`hidden_items`). Options the card already had (e.g. menu shortcuts, Low / Mid / High, flows) moved here from the row.
+  - **Merge**: show the section's visible settings inside another section instead (`section_merge`). The section disappears from the card and its settings appear at the end of the chosen one, under the section's name. A section other sections merge into stays its own, and nothing merges into a hidden section.
+- Status boxes close up when one is hidden (the arrows follow).
+
 ## v2026.10.15.9
 
 - **When in standby or off** (Card & sections → Power & standby, YAML `when_off`): **Hide the entire card**, **Collapse to the header** (default, as before) or **Keep expanded** — the last shows every section in standby too. Replaces the "Show the card while off" checkbox; `show_when_off: false` from older configs is read as `hide`.

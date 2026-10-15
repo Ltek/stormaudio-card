@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.9
+// Version: v2026.10.15.10
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.9';
+const BUILD_NUMBER = 'v2026.10.15.10';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -384,6 +384,85 @@ const HIDE_LISTS = {
   hide_dolby: { entity: 'dolby_mode', labels: DOLBY_MODE },
   hide_sphere: { entity: 'sphereaudio', labels: null },
 };
+
+// ---------------------------------------------------------------------------
+// Section editing (editor: pencil on a section row): rename, hide single settings, merge.
+// ---------------------------------------------------------------------------
+// Per-section settings the user can hide: [id, label, selector, existing show key?]. A setting with
+// a show key is the card's own option (its eye toggles that key); the rest use hidden_items.
+const SECTION_ITEMS = {
+  status: [['aflow', 'Audio flow (whole row)', '[data-k="aflow"]', 'show_audio_flow'],
+    ['ain', 'Source audio box', '[data-item="box-ain"]'], ['aproc', 'Processing box', '[data-item="box-aproc"]'],
+    ['aout', 'Output box', '[data-item="box-aout"]'], ['layout', 'Channel layout under Output', '', 'show_speaker_layout'],
+    ['vflow', 'Video flow (whole row)', '[data-k="vflow"]', 'show_video_flow'],
+    ['vin', 'Video in box', '[data-item="box-vin"]'], ['vsig', 'Signal box', '[data-item="box-vsig"]'],
+    ['vcol', 'Color box', '[data-item="box-vcol"]'], ['tags', 'Status tags', '[data-k="tags"]']],
+  volume: [['slider', 'Volume slider and − / +', '.sa-vollarge'], ['mute', 'Mute', '[data-toggle="mute"]'], ['dim', 'Dim', '[data-toggle="dim"]']],
+  listening: [['source', 'Source', '[data-row="source"]'], ['preset', 'Preset', '[data-row="preset"]'], ['surround', 'Surround mode', '[data-row="surround"]']],
+  audio: [['loudness', 'Loudness', '[data-row="loudness"]'], ['bass', 'Bass', '[data-slider="bass"]'], ['treble', 'Treble', '[data-slider="treble"]'],
+    ['center_enhance', 'Center enhance', '[data-slider="center_enhance"]'], ['surround_enhance', 'Surround enhance', '[data-slider="surround_enhance"]'],
+    ['lfe_enhance', 'LFE enhance', '[data-slider="lfe_enhance"]'], ['brightness', 'Brightness', '[data-slider="brightness"]'],
+    ['dialog_control', 'Dialog', '[data-slider="dialog_control"]'], ['lipsync', 'LipSync', '[data-slider="lipsync"]'],
+    ['auro_strength', 'Auro strength', '[data-slider="auro_strength"]'], ['lfe_dim', 'LFE Dim', '[data-toggle="lfe_dim"]']],
+  decoding: [['dolby_mode', 'Dolby mode', '[data-row="dolby_mode"]'], ['sphereaudio', 'SphereAudio', '[data-row="sphereaudio"]'],
+    ['auro_preset', 'Auro preset', '[data-row="auro_preset"]'], ['drc', 'DRC', '[data-row="drc"]'], ['imax_mode', 'IMAX', '[data-row="imax_mode"]'],
+    ['dolby_virtualizer', 'Dolby Virtualizer', '[data-toggle="dolby_virtualizer"]'], ['dialog_norm', 'Dialog Norm', '[data-toggle="dialog_norm"]'],
+    ['center_spread', 'Center Spread', '[data-toggle="center_spread"]']],
+  video: [['details', 'Video details', '[data-k="video_info"]'], ['note', 'Note', '[data-k="video_note"]']],
+  zones: [],
+  triggers: [],
+  frontpanel: [['fp_color', 'Color', '[data-row="fp_color"]'], ['fp_standby_delay', 'Standby delay', '[data-row="fp_standby_delay"]'],
+    ['fp_active_bright', 'Active brightness', '[data-slider="fp_active_bright"]'], ['fp_standby_bright', 'Standby brightness', '[data-slider="fp_standby_bright"]']],
+  info: [['details', 'Details list', '[data-k="info"]'], ['link', 'Connection note', '[data-k="link"]'], ['missing', 'Disabled-entities note', '[data-k="missing"]']],
+};
+// Sections other sections can be merged into, and sections that can't be merged anywhere.
+const MERGE_TARGETS = ['status', 'volume', 'listening', 'audio', 'decoding', 'video', 'zones', 'triggers', 'frontpanel', 'info'];
+const NOT_MERGEABLE = [];
+
+function defaultSectionName(id) { return id === 'status' ? 'Status' : (Object.fromEntries(FOLDS)[id] || id); }
+
+/** A section's name: the user's, else the default. */
+function secLabel(config, id) {
+  const n = config.section_names && config.section_names[id];
+  return n || defaultSectionName(id);
+}
+
+function sectionShown(config, id) { return !!(cfg(config, id === 'status' ? 'show_status' : FOLD_SHOW[id])); }
+
+/** The section a section is merged into, or '' when it shows as itself (none set, invalid, chained, or either one hidden). */
+function mergeTarget(config, id) {
+  const m = config.section_merge || {};
+  const t = m[id];
+  if (!t || t === id || !MERGE_TARGETS.includes(t) || NOT_MERGEABLE.includes(id) || m[t]) return '';
+  if (Object.keys(m).some((k) => m[k] === id)) return '';
+  if (!sectionShown(config, id) || !sectionShown(config, t)) return '';
+  return t;
+}
+
+function normalizeSectionEdits(c, out) {
+  const known = (id) => SECTION_ITEMS[id] !== undefined;
+  if (c.section_names && typeof c.section_names === 'object') {
+    const n = {};
+    Object.keys(c.section_names).forEach((id) => {
+      const v = String(c.section_names[id] == null ? '' : c.section_names[id]).trim();
+      if (known(id) && v && v !== defaultSectionName(id)) n[id] = v;
+    });
+    if (Object.keys(n).length) out.section_names = n;
+  }
+  const ok = new Set(Object.entries(SECTION_ITEMS).flatMap(([sec, items]) => items.filter((i) => !i[3]).map((i) => `${sec}.${i[0]}`)));
+  const hidden = [];
+  (Array.isArray(c.hidden_items) ? c.hidden_items : []).forEach((x) => { const v = String(x).trim(); if (ok.has(v) && !hidden.includes(v)) hidden.push(v); });
+  if (hidden.length) out.hidden_items = hidden;
+  if (c.section_merge && typeof c.section_merge === 'object') {
+    const m = {};
+    Object.keys(c.section_merge).forEach((id) => {
+      const t = String(c.section_merge[id] == null ? '' : c.section_merge[id]).trim();
+      if (known(id) && !NOT_MERGEABLE.includes(id) && MERGE_TARGETS.includes(t) && t !== id) m[id] = t;
+    });
+    if (Object.keys(m).length) out.section_merge = m;
+  }
+}
+
 // What the card does while the device is in standby / off.
 const WHEN_OFF = [['hide', 'Hide the entire card'], ['collapse', 'Collapse to the header'], ['expanded', 'Keep expanded']];
 // Ancestors that mean "the Dashboard is being edited / this is the editor preview".
@@ -452,8 +531,9 @@ function normalizeConfig(raw) {
     const full = orderedSections(c);
     if (JSON.stringify(full) !== JSON.stringify(SECTION_IDS)) out.section_order = full;
   }
-  const known = ['type', 'icons', 'styles', 'open_sections', 'section_order'];
+  const known = ['type', 'icons', 'styles', 'open_sections', 'section_order', 'section_names', 'hidden_items', 'section_merge'];
   if (out.when_off !== undefined && !WHEN_OFF.some(([v]) => v === out.when_off)) delete out.when_off;
+  normalizeSectionEdits(c, out);
   Object.keys(c).forEach((k) => {
     if (k === 'show_when_off') return; // replaced by when_off
     if (!(k in out) && !(k in DEFAULTS) && !(k in HIDE_LISTS) && !known.includes(k)) out[k] = c[k];
@@ -568,7 +648,12 @@ const CARD_CSS = `
   --mdc-icon-size: 20px; }
 .sa-pwr2:hover { background: color-mix(in srgb, var(--sa-ctx) 20%, transparent); }
 .sa-standby { padding: 2px 0 2px var(--sa-standby-indent, 46px); font-size: var(--sa-secondary-size, 13px); color: var(--sa-secondary-color, var(--secondary-text-color)); }
-.sa-chain { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr); gap: 6px; margin-top: 10px; }
+.sa-chain { display: flex; gap: 6px; margin-top: 10px; }
+.sa-chain > .sa-box { flex: 1 1 0; }
+.sa-uhide, .sa-away { display: none !important; }
+.sa-merged { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sa-divider-color, rgba(127,127,127,0.2)); }
+.sa-merged-h { margin-bottom: 4px; font-size: var(--sa-subtitle-size, 10px); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--sa-subtitle-color, var(--secondary-text-color)); }
 .sa-chain + .sa-chain { margin-top: 6px; }
 .sa-plain { padding: 6px 0 2px; border-top: 1px solid var(--sa-divider-color, rgba(127,127,127,0.2)); margin-top: 10px; }
 .sa-box-s.warn { color: var(--warning-color, #ff9800); }
@@ -768,7 +853,7 @@ class StormAudioCard extends HTMLElement {
     if (!this._open) this._open = new Set(c.open_sections || []);
     const fold = (sec, label, body) => `
       <details class="sa-fold" data-sec="${sec}"${this._open.has(sec) ? ' open' : ''}>
-        <summary><ha-icon class="sa-sec-i" icon="${esc(iconFor(c, sec))}"></ha-icon><span>${label}</span>
+        <summary><ha-icon class="sa-sec-i" icon="${esc(iconFor(c, sec))}"></ha-icon><span>${c.section_names && c.section_names[sec] ? esc(c.section_names[sec]) : label}</span>
           <span class="sa-peek" data-peek="${sec}"></span><ha-icon class="sa-chev" icon="mdi:chevron-right"></ha-icon></summary>
         ${body}
       </details>`;
@@ -776,7 +861,7 @@ class StormAudioCard extends HTMLElement {
     const dotAt = cfg(c, 'show_dot') ? cfg(c, 'dot_position') : 'none';
     const dot = (where) => (dotAt === where ? `<span class="sa-dot at-${where}" data-k="dot" data-pos="${where}"></span>` : '');
     if (this._collapsed === undefined) this._collapsed = cfg(c, 'collapsible') && cfg(c, 'start_collapsed');
-    const box = (id, title, bar) => `<div class="sa-box"><div class="sa-box-h">${title}</div><div class="sa-box-t" data-k="${id}_t"></div>`
+    const box = (id, title, bar) => `<div class="sa-box" data-item="box-${id}"><div class="sa-box-h">${title}</div><div class="sa-box-t" data-k="${id}_t"></div>`
       + `${bar ? '<div class="sa-vol"><span data-k="vol_bar"></span></div>' : `<div class="sa-box-s" data-k="${id}_1"></div>`}<div class="sa-box-s" data-k="${id}_2"></div></div>`;
     const arrow = '<ha-icon class="sa-arrow" icon="mdi:chevron-right"></ha-icon>';
     this.innerHTML = `
@@ -822,6 +907,7 @@ class StormAudioCard extends HTMLElement {
     this._root = this.querySelector('.sa');
     this._k = {};
     this.querySelectorAll('[data-k]').forEach((el) => { this._k[el.dataset.k] = el; });
+    this._applyLayout();
     this.querySelectorAll('details.sa-fold').forEach((d) => d.addEventListener('toggle', () => {
       if (d.open) this._open.add(d.dataset.sec); else this._open.delete(d.dataset.sec);
     }));
@@ -972,6 +1058,47 @@ class StormAudioCard extends HTMLElement {
     }
   }
 
+  /** Merge sections into others (section_merge): move their content to the end of the target, under their name. */
+  _applyLayout() {
+    const c = this._config;
+    orderedSections(c).forEach((id) => {
+      const target = mergeTarget(c, id);
+      if (!target) return;
+      const from = this.querySelector(`[data-sec="${id}"]`);
+      const to = this.querySelector(`[data-sec="${target}"]`);
+      if (!from || !to) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'sa-merged';
+      wrap.dataset.from = id;
+      wrap.innerHTML = `<div class="sa-merged-h">${esc(secLabel(c, id))}</div>`;
+      [...from.children].filter((el) => el.tagName !== 'SUMMARY').forEach((el) => wrap.appendChild(el));
+      to.appendChild(wrap);
+      from.classList.add('sa-away');
+    });
+  }
+
+  /** Hide the settings the user hid (hidden_items); a status arrow shows only between two visible boxes. */
+  _applyItems() {
+    const c = this._config;
+    const hidden = new Set(c.hidden_items || []);
+    Object.entries(SECTION_ITEMS).forEach(([sec, items]) => items.forEach(([id, , sel, key]) => {
+      if (key || !sel) return;
+      const off = hidden.has(`${sec}.${id}`);
+      this.querySelectorAll(sel).forEach((el) => el.classList.toggle('sa-uhide', off));
+    }));
+    this.querySelectorAll('.sa-chain').forEach((chain) => {
+      const kids = [...chain.children];
+      const boxes = kids.filter((el) => el.classList.contains('sa-box'));
+      const shown = boxes.filter((el) => !el.classList.contains('sa-uhide'));
+      kids.forEach((el) => { if (el.classList.contains('sa-arrow')) el.classList.add('sa-uhide'); });
+      shown.slice(1).forEach((b) => {
+        const prev = kids[kids.indexOf(b) - 1];
+        if (prev && prev.classList.contains('sa-arrow')) prev.classList.remove('sa-uhide');
+      });
+      chain.classList.toggle('sa-uhide', boxes.length > 0 && shown.length === 0);
+    });
+  }
+
   _applyCollapse() {
     if (!this._built) return;
     const can = cfg(this._config, 'collapsible') && this._powerState === 'on';
@@ -1068,7 +1195,7 @@ class StormAudioCard extends HTMLElement {
       if (sec === 'zones') show = show && zones.length > 0;
       if (sec === 'triggers') show = show && triggers.length > 0;
       if (sec === 'frontpanel') show = show && !!(E.fp_color || E.fp_standby_delay || E.fp_active_bright || E.fp_standby_bright);
-      el.hidden = !show;
+      el.hidden = !show && !el.querySelector(':scope > .sa-merged');
     });
 
     // audio flow: what the source sends › what the processor does › what plays
@@ -1233,6 +1360,7 @@ class StormAudioCard extends HTMLElement {
     set('missing', found && missing.length ? `Disabled entities you can enable: ${missing.join(' · ')} — Settings → Devices & services → StormAudio → device → Entities.` : '');
     K.missing.hidden = !found || !missing.length;
 
+    this._applyItems();
     this._applyVisibility();
   }
 
@@ -1643,6 +1771,10 @@ const EDITOR_CSS = `
         .sae-brow { display: flex; align-items: center; gap: var(--ltek-sp-2); padding: var(--ltek-sp-1); border-top: 1px solid var(--ltek-c-border-soft); }
         .sae-brow:first-child { border-top: none; }
         .sae-brow.off .sae-sname { color: var(--ltek-c-muted); }
+        .sae-act.on { color: var(--ltek-c-accent); }
+        .sae-stag { flex: 0 0 auto; font-size: var(--ltek-fs-small); color: var(--ltek-c-muted); white-space: nowrap; }
+        .sae-sedit { margin: calc(-1 * var(--ltek-sp-1)) 0 var(--ltek-sp-1) 28px; padding: var(--ltek-sp-2) var(--ltek-sp-3);
+          border: 1px solid var(--ltek-c-accent); border-radius: var(--ltek-r-card); background: var(--ltek-c-surface); }
 `;
 
 class StormAudioCardEditor extends HTMLElement {
@@ -1734,6 +1866,49 @@ class StormAudioCardEditor extends HTMLElement {
 
   /** The section list (design system "section rows"): icon, name, sub-option eyes, ↑ / ↓, start open, eye.
    *  Every section, status included, can be moved. */
+  /** The inline panel under a section row (pencil): name, its settings' eyes, merge. */
+  _secEditPanel(id) {
+    const c = this._config;
+    const items = SECTION_ITEMS[id] || [];
+    const hidden = new Set(c.hidden_items || []);
+    const m = c.section_merge || {};
+    const isTarget = Object.keys(m).some((k) => k !== id && m[k] === id);
+    const rows = items.map(([iid, label, , key]) => {
+      const on = key ? !!cfg(c, key) : !hidden.has(`${id}.${iid}`);
+      const attr = key ? `data-eye="${key}"` : `data-item-eye="${id}.${iid}"`;
+      return `<div class="sae-brow${on ? '' : ' off'}"><span class="sae-sname">${esc(label)}</span>${eyeToggle(attr, on, '', label)}</div>`;
+    }).join('');
+    const targets = MERGE_TARGETS.filter((t) => t !== id && !m[t]);
+    const cur = m[id] || '';
+    let merge;
+    if (NOT_MERGEABLE.includes(id)) merge = '<p class="sae-hint">This section can\'t be shown inside another one.</p>';
+    else if (isTarget) merge = '<p class="sae-hint">Other sections are shown inside this one, so it stays a section of its own.</p>';
+    else {
+      merge = `<div class="sae-row"><label class="lbl">Show its settings in</label>
+        <select data-smerge="${id}"><option value="">— its own section —</option>${targets.map((t) => `<option value="${t}"${t === cur ? ' selected' : ''}>${esc(secLabel(c, t))}</option>`).join('')}</select></div>
+        <p class="sae-hint">The section itself disappears from the card; its visible settings appear at the end of the chosen section, under this section's name.${cur && !mergeTarget(c, id) ? ' <b>Not applied now:</b> one of the two sections is hidden.' : ''}</p>`;
+    }
+    return `<div class="sae-sedit" data-sedit-panel="${id}">
+      <div class="sae-row"><label class="lbl">Name</label><input type="text" data-sname="${id}" value="${esc((c.section_names || {})[id] || '')}" placeholder="${esc(defaultSectionName(id))}"></div>
+      <div class="sae-group">Settings</div>
+      ${items.length ? `<div class="sae-blist">${rows}</div>` : '<p class="sae-hint">This section is a single block; use its eye to show or hide it.</p>'}
+      <div class="sae-group">Merge</div>
+      ${merge}
+    </div>`;
+  }
+
+  /** Pencil button for a section row. */
+  _secEditBtn(id) {
+    const open = this._sedit === id;
+    return `<button class="sae-act${open ? ' on' : ''}" data-sedit="${id}" aria-expanded="${open}" title="${open ? 'Close' : 'Edit section'}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>`;
+  }
+
+  /** Tag on a merged section's row: where its settings show. */
+  _secMergeTag(id) {
+    const t = mergeTarget(this._config, id);
+    return t ? `<span class="sae-stag" title="Shown inside ${esc(secLabel(this._config, t))}">→ ${esc(secLabel(this._config, t))}</span>` : '';
+  }
+
   _sectionsControl() {
     const c = this._config;
     const order = orderedSections(c);
@@ -1745,12 +1920,12 @@ class StormAudioCardEditor extends HTMLElement {
     const statusOn = cfg(c, 'show_status');
     const status = (i) => `<div class="sae-srow${statusOn ? '' : ' off'}" data-section="status">
         <ha-icon class="sae-sicon" icon="mdi:transit-connection-variant"></ha-icon>
-        <span class="sae-sname">Status</span>
-        <span class="sae-sctl">${eyeToggle(`data-eye="show_audio_flow"${statusOn ? '' : ' disabled'}`, cfg(c, 'show_audio_flow'), 'Audio flow')}${eyeToggle(`data-eye="show_video_flow"${statusOn ? '' : ' disabled'}`, cfg(c, 'show_video_flow'), 'Video flow')}${eyeToggle(`data-eye="show_speaker_layout"${statusOn && cfg(c, 'show_audio_flow') ? '' : ' disabled'}`, cfg(c, 'show_speaker_layout'), 'Layout', 'channel layout under Output')}</span>
+        <span class="sae-sname">${esc(secLabel(c, 'status'))}</span>${this._secMergeTag('status')}
         ${move('status', -1, i === 0, 'Status')}${move('status', 1, i === last, 'Status')}
         <span class="sae-open-gap"></span>
         ${eyeToggle('data-eye="show_status"', statusOn, '', 'status area')}
-      </div>`;
+        ${this._secEditBtn('status')}
+      </div>${this._sedit === 'status' ? this._secEditPanel('status') : ''}`;
     const rows = order.map((id, i) => {
       if (id === 'status') return status(i);
       const label = byId[id];
@@ -1763,13 +1938,14 @@ class StormAudioCardEditor extends HTMLElement {
         : '';
       return `<div class="sae-srow${on ? '' : ' off'}" data-section="${id}">
         <ha-icon class="sae-sicon" icon="${esc(iconFor(c, id))}"></ha-icon>
-        <span class="sae-sname">${esc(label)}</span>
+        <span class="sae-sname">${esc(secLabel(c, id))}</span>${this._secMergeTag(id)}
         ${subs ? `<span class="sae-sctl">${subs}</span>` : ''}
         ${move(id, -1, i === 0, label)}${move(id, 1, i === last, label)}
         ${collapsible ? rowToggle(`data-open="${id}"`, openSecs.includes(id), 'Open', 'mdi:unfold-more-horizontal', 'mdi:unfold-less-horizontal',
           openSecs.includes(id) ? 'Starts open — tap to start collapsed' : 'Starts collapsed — tap to start open', !on) : '<span class="sae-open-gap"></span>'}
         ${eyeToggle(`data-eye="${showKey}"`, on, '', label)}
-      </div>`;
+        ${this._secEditBtn(id)}
+      </div>${this._sedit === id ? this._secEditPanel(id) : ''}`;
     }).join('');
     return `<div class="sae-slist">${rows}</div>
       ${c.section_order ? '<div class="sae-row"><button class="sae-preset" data-order-reset>Reset to default order</button></div>' : ''}`;
@@ -1899,6 +2075,34 @@ class StormAudioCardEditor extends HTMLElement {
         this._render();
       });
     });
+    this.querySelectorAll('[data-sedit]').forEach((b) => b.addEventListener('click', () => {
+      this._sedit = this._sedit === b.dataset.sedit ? '' : b.dataset.sedit;
+      this._render();
+    }));
+    this.querySelectorAll('[data-sname]').forEach((el) => el.addEventListener('change', () => {
+      const names = { ...(this._config.section_names || {}) };
+      const v = el.value.trim();
+      if (v) names[el.dataset.sname] = v; else delete names[el.dataset.sname];
+      this._config.section_names = names;
+      this._emit();
+      this._render();
+    }));
+    this.querySelectorAll('[data-item-eye]').forEach((b) => b.addEventListener('click', () => {
+      const id = b.dataset.itemEye;
+      const was = (this._config.hidden_items || []).includes(id);
+      const list = (this._config.hidden_items || []).filter((x) => x !== id);
+      if (!was) list.push(id);
+      this._config.hidden_items = list;
+      this._emit();
+      this._render();
+    }));
+    this.querySelectorAll('[data-smerge]').forEach((el) => el.addEventListener('change', () => {
+      const m = { ...(this._config.section_merge || {}) };
+      if (el.value) m[el.dataset.smerge] = el.value; else delete m[el.dataset.smerge];
+      this._config.section_merge = m;
+      this._emit();
+      this._render();
+    }));
     this.querySelectorAll('[data-eye]').forEach((b) => b.addEventListener('click', () => {
       this._set(b.dataset.eye, !cfg(this._config, b.dataset.eye));
       this._render();
@@ -1969,7 +2173,7 @@ class StormAudioCardEditor extends HTMLElement {
 // Test hooks (pure helpers; no effect in the browser)
 StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
-  WHEN_OFF, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
+  WHEN_OFF, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
   orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels,
 };
