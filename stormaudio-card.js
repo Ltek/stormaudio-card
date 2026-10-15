@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.10
+// Version: v2026.10.15.11
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.10';
+const BUILD_NUMBER = 'v2026.10.15.11';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -590,6 +590,26 @@ function rootClasses(config) {
 // ---------------------------------------------------------------------------
 function okState(v) { return v !== undefined && v !== null && v !== '' && v !== 'unknown' && v !== 'unavailable'; }
 
+/** Make `from`'s children match `to`'s (a parsed template) while keeping every element that is
+ *  still the same tag in place. The card is patched instead of rebuilt on each config change, so
+ *  the editor preview doesn't flash: icons, open sections and listeners stay. */
+function morphChildren(from, to) {
+  const a = [...from.childNodes];
+  const b = [...to.childNodes];
+  b.forEach((nb, i) => {
+    const na = a[i];
+    if (!na) { from.appendChild(nb); return; }
+    if (na.nodeType !== nb.nodeType || na.nodeName !== nb.nodeName) { from.replaceChild(nb, na); return; }
+    if (na.nodeType === 3 || na.nodeType === 8) { if (na.nodeValue !== nb.nodeValue) na.nodeValue = nb.nodeValue; return; }
+    if (na.nodeType !== 1) return;
+    [...na.attributes].forEach((at) => { if (!nb.hasAttribute(at.name)) na.removeAttribute(at.name); });
+    [...nb.attributes].forEach((at) => { if (na.getAttribute(at.name) !== at.value) na.setAttribute(at.name, at.value); });
+    if (na.localName === 'details') na.open = nb.hasAttribute('open');
+    morphChildren(na, nb.localName === 'template' ? nb.content : nb);
+  });
+  a.slice(b.length).forEach((n) => n.remove());
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -799,6 +819,7 @@ class StormAudioCard extends HTMLElement {
   setConfig(config) {
     if (!config || typeof config !== 'object') throw new Error('Invalid configuration');
     const next = normalizeConfig(config);
+    if (this._built && JSON.stringify(next) === JSON.stringify(this._config)) return;
     if (cfg(next, 'start_collapsed') !== cfg(this._config, 'start_collapsed') || cfg(next, 'collapsible') !== cfg(this._config, 'collapsible')) {
       this._collapsed = undefined;
     }
@@ -848,6 +869,25 @@ class StormAudioCard extends HTMLElement {
   }
 
   // -- build once -----------------------------------------------------------
+  /** First build: plain innerHTML. Later: patch the existing DOM (see morphChildren). */
+  _setHTML(html) {
+    if (!this.querySelector('ha-card')) { this.innerHTML = html; return; }
+    const tpl = document.createElement('template');
+    tpl.innerHTML = html;
+    morphChildren(this, tpl.content);
+  }
+
+  /** True the first time for this element + key: listeners survive a patch, so bind them once. */
+  _once(el, key) {
+    if (!el) return false;
+    if (!this._wired) this._wired = new WeakMap();
+    const done = this._wired.get(el) || new Set();
+    if (done.has(key)) return false;
+    done.add(key);
+    this._wired.set(el, done);
+    return true;
+  }
+
   _build() {
     const c = this._config;
     if (!this._open) this._open = new Set(c.open_sections || []);
@@ -864,7 +904,7 @@ class StormAudioCard extends HTMLElement {
     const box = (id, title, bar) => `<div class="sa-box" data-item="box-${id}"><div class="sa-box-h">${title}</div><div class="sa-box-t" data-k="${id}_t"></div>`
       + `${bar ? '<div class="sa-vol"><span data-k="vol_bar"></span></div>' : `<div class="sa-box-s" data-k="${id}_1"></div>`}<div class="sa-box-s" data-k="${id}_2"></div></div>`;
     const arrow = '<ha-icon class="sa-arrow" icon="mdi:chevron-right"></ha-icon>';
-    this.innerHTML = `
+    this._setHTML(`
       <style>${CARD_CSS}</style>
       <ha-card class="${rootClasses(c)}" style="${esc(rootStyleVars(c))}">
         <div class="sa-head${cfg(c, 'collapsible') ? ' is-tap' : ''}"${cfg(c, 'collapsible') ? ' data-tap="collapse"' : ''}>
@@ -903,18 +943,18 @@ class StormAudioCard extends HTMLElement {
             return fold(id, label, SECTION_BODIES[id]);
           }).join('')}
         </div>
-      </ha-card>`;
+      </ha-card>`);
     this._root = this.querySelector('.sa');
     this._k = {};
     this.querySelectorAll('[data-k]').forEach((el) => { this._k[el.dataset.k] = el; });
     this._applyLayout();
-    this.querySelectorAll('details.sa-fold').forEach((d) => d.addEventListener('toggle', () => {
+    this.querySelectorAll('details.sa-fold').forEach((d) => this._once(d, 'toggle') && d.addEventListener('toggle', () => {
       if (d.open) this._open.add(d.dataset.sec); else this._open.delete(d.dataset.sec);
     }));
     const range = this._k.vol_range;
-    range.addEventListener('input', () => { this._dragging = true; this._k.vol_val.textContent = `${range.value}`; });
-    range.addEventListener('change', () => { this._dragging = false; this._setNumber('volume', Number(range.value)); });
-    this._bind();
+    if (this._once(range, 'range')) range.addEventListener('input', () => { this._dragging = true; this._k.vol_val.textContent = `${range.value}`; });
+    if (this._once(range, 'range-change')) range.addEventListener('change', () => { this._dragging = false; this._setNumber('volume', Number(range.value)); });
+    if (this._once(this._root, 'bind')) this._bind();
     this._built = true;
     this._sig = '';
     this._optSig = {};
@@ -2017,9 +2057,10 @@ class StormAudioCardEditor extends HTMLElement {
       <label class="sae-check"><input type="checkbox" data-key="collapsible"${cfg(c, 'collapsible') ? ' checked' : ''}>
         Tap the header to collapse the card to just the header (while on)</label>
       ${cfg(c, 'collapsible') ? `<label class="sae-check"><input type="checkbox" data-key="start_collapsed"${cfg(c, 'start_collapsed') ? ' checked' : ''}>
-        Start collapsed</label>` : ''}
-      <div class="sae-group">Sections</div>
+        Start collapsed</label>` : ''}`;
+    const sectionsBody = `
       <p class="sae-hint">The order of the sections on the card (↑ / ↓, the status included), which start open, and the eye to show or hide each one. Sections with no (enabled) entities hide themselves.</p>
+      <p class="sae-hint">Use the <b>pencil</b> on a section to rename it, hide single settings, or show its settings inside another section.</p>
       ${this._sectionsControl()}`;
     const iconBody = `
       <p class="sae-hint">Any Material Design icon — type just the name (e.g. <b>waveform</b>); "mdi:" is added for you. Leave empty for the default.</p>
@@ -2038,7 +2079,8 @@ class StormAudioCardEditor extends HTMLElement {
     this.innerHTML = `<style>${EDITOR_CSS}</style>
       <div class="sae">
         ${this._panel('device', 'mdi:audio-video', 'Device', deviceBody)}
-        ${this._panel('card', 'mdi:card-text-outline', 'Card & sections', cardBody)}
+        ${this._panel('card', 'mdi:card-text-outline', 'Card', cardBody)}
+        ${this._panel('sections', 'mdi:view-agenda-outline', 'Sections', sectionsBody)}
         ${this._panel('buttons', 'mdi:gesture-tap-button', 'Chips', this._buttonsBody())}
         ${this._panel('icons', 'mdi:emoticon-outline', 'Icons', iconBody)}
         ${this._panel('look', 'mdi:palette', 'Appearance', `<p class="sae-hint">Sizes and colors. Every color can follow your theme or be custom; "Back to default" (↺) resets a size.</p>${looks}`)}

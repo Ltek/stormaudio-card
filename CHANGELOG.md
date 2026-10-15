@@ -1,5 +1,10 @@
 # Changelog
 
+## v2026.10.15.11
+
+- **Sections** is its own top-level panel in the editor (it was at the bottom of *Card & sections*, now just **Card**).
+- **The preview no longer refreshes on every change.** A config change now patches the card in place instead of rebuilding it, so the editor preview keeps its icons, open sections and position; a change that leaves the config the same does nothing.
+
 ## v2026.10.15.10
 
 - **Edit a section** — a **pencil** on every row in Card & sections → Sections opens that section's settings under the row:
