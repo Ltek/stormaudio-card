@@ -1,5 +1,11 @@
 # Changelog
 
+## v2026.10.15.13
+
+- **Merged sections follow their own checks.** A merged section's settings now show only when that section would show on its own — e.g. Picture merged elsewhere without its entities no longer leaves an empty heading, and merged controls never appear for a missing entity.
+- The editor opens the **Card** panel on start (it tried to open the Device panel, which no longer exists, so everything started collapsed).
+- Choosing to merge into an **always-visible** area (Status, or Volume when it is not collapsible) shows a warning: the controls are then outside a collapsed section.
+
 ## v2026.10.15.12
 
 - The **Device** picker moved into the **Card** panel (it was a whole panel for one setting).

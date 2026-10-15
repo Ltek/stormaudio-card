@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.12
+// Version: v2026.10.15.13
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.12';
+const BUILD_NUMBER = 'v2026.10.15.13';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -417,6 +417,8 @@ const SECTION_ITEMS = {
 };
 // Sections other sections can be merged into, and sections that can't be merged anywhere.
 const MERGE_TARGETS = ['status', 'volume', 'listening', 'audio', 'decoding', 'video', 'zones', 'triggers', 'frontpanel', 'info'];
+// Areas that are always visible (not a collapsed section): merged controls there can be hit by accident.
+const ALWAYS_SHOWN = ['status', 'volume'];
 const NOT_MERGEABLE = [];
 
 function defaultSectionName(id) { return id === 'status' ? 'Status' : (Object.fromEntries(FOLDS)[id] || id); }
@@ -1224,6 +1226,7 @@ class StormAudioCard extends HTMLElement {
     this._standbyNow = !isOn && !isDown;
 
     // sections on/off (config) + entity availability
+    const secShown = {};
     this.querySelectorAll('[data-sec]').forEach((el) => {
       const sec = el.dataset.sec;
       let show = cfg(c, { status: 'show_status' }[sec] || `show_${sec}`);
@@ -1235,7 +1238,14 @@ class StormAudioCard extends HTMLElement {
       if (sec === 'zones') show = show && zones.length > 0;
       if (sec === 'triggers') show = show && triggers.length > 0;
       if (sec === 'frontpanel') show = show && !!(E.fp_color || E.fp_standby_delay || E.fp_active_bright || E.fp_standby_bright);
-      el.hidden = !show && !el.querySelector(':scope > .sa-merged');
+      el.hidden = !show;
+      secShown[sec] = show;
+    });
+    // A merged section's settings show only when that section would show on its own (its entities
+    // exist, HDR is playing…); a target with nothing of its own still shows for merged settings.
+    this.querySelectorAll('.sa-merged').forEach((w) => { w.hidden = !secShown[w.dataset.from]; });
+    this.querySelectorAll('[data-sec]').forEach((el) => {
+      if (el.hidden && sectionShown(c, el.dataset.sec) && el.querySelector(':scope > .sa-merged:not([hidden])')) el.hidden = false;
     });
 
     // audio flow: what the source sends › what the processor does › what plays
@@ -1812,6 +1822,7 @@ const EDITOR_CSS = `
         .sae-brow:first-child { border-top: none; }
         .sae-brow.off .sae-sname { color: var(--ltek-c-muted); }
         .sae-act.on { color: var(--ltek-c-accent); }
+        .sae-warn { color: var(--warning-color, #ff9800); }
         .sae-stag { flex: 0 0 auto; font-size: var(--ltek-fs-small); color: var(--ltek-c-muted); white-space: nowrap; }
         .sae-sedit { margin: calc(-1 * var(--ltek-sp-1)) 0 var(--ltek-sp-1) 28px; padding: var(--ltek-sp-2) var(--ltek-sp-3);
           border: 1px solid var(--ltek-c-accent); border-radius: var(--ltek-r-card); background: var(--ltek-c-surface); }
@@ -1821,7 +1832,7 @@ class StormAudioCardEditor extends HTMLElement {
   constructor() {
     super();
     this._config = {};
-    this._open = new Set(['device']);
+    this._open = new Set(['card']);
     this._rendered = false;
     this._cmode = {};
   }
@@ -1926,6 +1937,7 @@ class StormAudioCardEditor extends HTMLElement {
     else {
       merge = `<div class="sae-row"><label class="lbl">Show its settings in</label>
         <select data-smerge="${id}"><option value="">— its own section —</option>${targets.map((t) => `<option value="${t}"${t === cur ? ' selected' : ''}>${esc(secLabel(c, t))}</option>`).join('')}</select></div>
+        ${cur && ALWAYS_SHOWN.includes(cur) && !(cur === 'volume' && cfg(c, 'volume_collapsible')) ? `<p class="sae-hint sae-warn">${esc(secLabel(c, cur))} is always visible, not a collapsed section, so these settings can be changed by a stray tap.</p>` : ''}
         <p class="sae-hint">The section itself disappears from the card; its visible settings appear at the end of the chosen section, under this section's name.${cur && !mergeTarget(c, id) ? ' <b>Not applied now:</b> one of the two sections is hidden.' : ''}</p>`;
     }
     return `<div class="sae-sedit" data-sedit-panel="${id}">
