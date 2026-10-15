@@ -1,5 +1,10 @@
 # Changelog
 
+## v2026.10.15.9
+
+- **When in standby or off** (Card & sections → Power & standby, YAML `when_off`): **Hide the entire card**, **Collapse to the header** (default, as before) or **Keep expanded** — the last shows every section in standby too. Replaces the "Show the card while off" checkbox; `show_when_off: false` from older configs is read as `hide`.
+- **The card editor always shows the card expanded** — in standby, with *Hide* or *Collapse*, and with *Start collapsed* — so every section can be set up. This no longer depends on Home Assistant passing an edit/preview flag to the card.
+
 ## v2026.10.15.8
 
 - **Every section can be moved, the status area included** (Card & sections → Sections, ↑ / ↓ on the Status row too). YAML: `section_order` now includes `status`. An order saved by v2026.10.15.6 / .7 (without `status`) keeps status on top.

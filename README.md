@@ -2,7 +2,7 @@
 
 A Home Assistant Dashboard **custom card** for **StormAudio / Focal / Bryston processors** (ISP / ISR series, Focal Astral 16, Bryston SP4): power, source, audio format and video status at a glance, plus collapsible sections for listening, audio processing, video info, zones, 12V triggers, the front panel and full device info — all in one card with a visual editor. Same design as the [JVC Projector Card](https://github.com/Ltek/jvc-projector-card) and [Lumagen Card](https://github.com/Ltek/lumagen-card).
 
-Current build: **v2026.10.15.8** · full history in [CHANGELOG.md](CHANGELOG.md)
+Current build: **v2026.10.15.9** · full history in [CHANGELOG.md](CHANGELOG.md)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ltek&repository=stormaudio-card&category=plugin)
 
@@ -39,7 +39,7 @@ Status sits on top. **Every control is in a collapsed section**, so nothing chan
 ```
 
 - **Header** — the icon is the power button: tap to toggle the processor on / standby. It shows the power state (context color when on; orange and pulsing while it is starting up or shutting down). The dot is the link: green = the integration reaches the processor, red = it can't; the summary then reads *Offline* in red.
-- **Standby** — the card shrinks to its header instead of disappearing, so you can power on from it. Put the "Standby · tap the icon to power on" message below the title, inline, or hidden; or show a power button on the right. Optionally hide the card in standby (it always shows while you edit the Dashboard).
+- **Standby** — choose what the card does while the processor is in standby / off: **hide the entire card**, **collapse to the header** (the default; you can still power on from it) or **keep expanded**. In the card editor it always starts expanded, so every section can be set up. Put the "Standby · tap the icon to power on" message below the title, inline, or hidden; or show a power button on the right. Optionally hide the card in standby (it always shows while you edit the Dashboard).
 - **Collapse** — optionally tap the header to collapse the card to just the header while the processor is on, and start collapsed.
 - **Status** — two flows, each can be hidden on its own. **Audio:** Source audio (the encoding the source sends — Dolby Atmos, DTS:X, PCM… — plus channel format, sample rate and input) › Processing (*Native*, *Upmix* or *Downmix*, then the effects that are on: Dolby mode, SphereAudio, Auro, Loudness, StormXT; *"<mode> not engaged"* in orange when the chosen upmixer can't run on this content) › Output (the encoding the processor renders — the source's own format when decoding natively, the upmixer such as Dolby Surround or Auro-Matic when upmixing — with a volume bar and the volume or Muted; the speaker layout, e.g. 7.1.4, is optional: `show_speaker_layout`). **Video:** Video in (input, HDMI port, copy protection) › Signal (resolution, refresh rate, HDR) › Color (color space, depth, mode). Video input, sync, copy protection and mode are integration sensors that are disabled by default; enable them to fill those lines.
 - **Tags** appear only when active: MUTED, STORM (surround mode engaged), STORMXT, the video encoding (HDR10 / Dolby Vision / HLG…), DIM, LINK DOWN.
@@ -91,7 +91,7 @@ Everything is in the visual editor (Device · Card & sections · Chips · Icons 
 | `device` | first processor | Device ID, if you have more than one StormAudio processor. |
 | `title` | `StormAudio` | Header title. |
 | `strip_prefix` | `true` | Strip the device name from zone / trigger labels ("ISP Zone 2" → "Zone 2"). |
-| `show_when_off` | `true` | `true`: show the card (header only) in standby. `false`: hide it. |
+| `when_off` | `collapse` | While the processor is in standby / off: `hide` (hide the entire card), `collapse` (shrink to the header, so you can power on from it) or `expanded` (keep every section shown). The card editor always shows it expanded. The old `show_when_off: false` still works and means `hide`. |
 | `standby_text` | `below` | Standby message: `below` the title, `inline` with it, or `hidden`. |
 | `standby_message` | stock text | Your own standby message; empty = "Standby · tap the icon to power on". |
 | `standby_button` | `false` | In standby, replace the right-hand "Standby" with a power button. |

@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.8
+// Version: v2026.10.15.9
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.8';
+const BUILD_NUMBER = 'v2026.10.15.9';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -268,7 +268,7 @@ function fmtChannels(fmt) {
 const DEFAULTS = {
   device: '',
   title: 'StormAudio',
-  show_when_off: true,
+  when_off: 'collapse',
   standby_text: 'below',
   standby_message: '',
   standby_button: false,
@@ -384,6 +384,10 @@ const HIDE_LISTS = {
   hide_dolby: { entity: 'dolby_mode', labels: DOLBY_MODE },
   hide_sphere: { entity: 'sphereaudio', labels: null },
 };
+// What the card does while the device is in standby / off.
+const WHEN_OFF = [['hide', 'Hide the entire card'], ['collapse', 'Collapse to the header'], ['expanded', 'Keep expanded']];
+// Ancestors that mean "the Dashboard is being edited / this is the editor preview".
+const EDITOR_WRAPPERS = ['hui-card-preview', 'hui-dialog-edit-card', 'hui-card-edit-mode', 'hui-card-options', 'hui-section-edit-mode'];
 const STANDBY_TEXT = [['below', 'Below the title'], ['inline', 'Inline with the title'], ['hidden', 'Hidden']];
 
 /** String list: trimmed, de-duplicated, empties dropped. */
@@ -397,7 +401,9 @@ function strList(a) {
 }
 
 function normalizeConfig(raw) {
-  const c = raw && typeof raw === 'object' ? raw : {};
+  let c = raw && typeof raw === 'object' ? raw : {};
+  // Legacy `show_when_off: false` (hide the card in standby) → `when_off: hide`.
+  if (c.when_off === undefined && (c.show_when_off === false || c.show_when_off === 'false')) c = { ...c, when_off: 'hide' };
   const out = {};
   if (c.type !== undefined) out.type = c.type;
   Object.keys(DEFAULTS).forEach((k) => {
@@ -447,7 +453,9 @@ function normalizeConfig(raw) {
     if (JSON.stringify(full) !== JSON.stringify(SECTION_IDS)) out.section_order = full;
   }
   const known = ['type', 'icons', 'styles', 'open_sections', 'section_order'];
+  if (out.when_off !== undefined && !WHEN_OFF.some(([v]) => v === out.when_off)) delete out.when_off;
   Object.keys(c).forEach((k) => {
+    if (k === 'show_when_off') return; // replaced by when_off
     if (!(k in out) && !(k in DEFAULTS) && !(k in HIDE_LISTS) && !known.includes(k)) out[k] = c[k];
   });
   return out;
@@ -727,6 +735,25 @@ class StormAudioCard extends HTMLElement {
   set editMode(v) { this._editMode = !!v; this._applyVisibility(); }
   set preview(v) { this._preview = !!v; this._applyVisibility(); }
 
+  connectedCallback() { this._applyVisibility(); }
+
+  /**
+   * True while the Dashboard is being edited or this card is the editor preview.
+   * HA does not always pass `preview` / `editMode` to the card element, so also
+   * look for the editor's wrappers among the ancestors (crossing shadow roots).
+   */
+  _editing() {
+    if (this._editMode || this._preview) return true;
+    let n = this.parentNode || (this.getRootNode && this.getRootNode().host);
+    for (let i = 0; n && i < 40; i++) {
+      const tag = (n.localName || '').toLowerCase();
+      if (EDITOR_WRAPPERS.includes(tag)) return true;
+      if (n.hasAttribute && (n.hasAttribute('preview') || n.hasAttribute('edit-mode'))) return true;
+      n = n.parentNode || n.host;
+    }
+    return false;
+  }
+
   getCardSize() { return 6; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: 'auto' }; }
 
@@ -948,15 +975,19 @@ class StormAudioCard extends HTMLElement {
   _applyCollapse() {
     if (!this._built) return;
     const can = cfg(this._config, 'collapsible') && this._powerState === 'on';
-    const collapsed = can && !!this._collapsed && !this._editMode && !this._preview;
+    const collapsed = can && !!this._collapsed && !this._editing();
     this._root.classList.toggle('is-collapsed', collapsed);
     this._k.hchev.hidden = !can;
   }
 
   _applyVisibility() {
     if (!this._built) return;
-    const hide = !cfg(this._config, 'show_when_off') && this._powerState === 'off' && !this._editMode && !this._preview;
+    const editing = this._editing();
+    const mode = cfg(this._config, 'when_off');
+    const hide = mode === 'hide' && this._powerState === 'off' && !editing;
     this.style.display = hide ? 'none' : '';
+    // In standby the body collapses to the header unless when_off is 'expanded'; the editor always shows it.
+    if (this._k && this._k.body) this._k.body.hidden = !this._found || (this._standbyNow && mode !== 'expanded' && !editing);
     this._applyCollapse();
   }
 
@@ -1022,7 +1053,8 @@ class StormAudioCard extends HTMLElement {
     K.pwr2.hidden = !sbButton;
     K.standby_inline.hidden = !(standby && sbMode === 'inline');
     K.standby.hidden = !(standby && sbMode === 'below');
-    K.body.hidden = !found || (!isOn && !isDown);
+    this._found = found;
+    this._standbyNow = !isOn && !isDown;
 
     // sections on/off (config) + entity availability
     this.querySelectorAll('[data-sec]').forEach((el) => {
@@ -1787,9 +1819,10 @@ class StormAudioCardEditor extends HTMLElement {
       <label class="sae-check"><input type="checkbox" data-key="strip_prefix"${cfg(c, 'strip_prefix') ? ' checked' : ''}>
         Strip the device name from zone/trigger labels (e.g. "ISP Zone 2" → "Zone 2")</label>
       <div class="sae-group">Standby</div>
-      <label class="sae-check"><input type="checkbox" data-key="show_when_off"${cfg(c, 'show_when_off') ? ' checked' : ''}>
-        Show the card (header only) while in standby (otherwise hide it)</label>
-      ${cfg(c, 'show_when_off') ? `
+      <div class="sae-row"><label class="lbl">When in standby or off</label>
+        <select data-key="when_off">${WHEN_OFF.map(([v, n]) => `<option value="${v}"${v === cfg(c, 'when_off') ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+      <p class="sae-hint">The card editor always shows the card expanded, so every section can be set up.</p>
+      ${cfg(c, 'when_off') !== 'hide' ? `
       <div class="sae-row"><label class="lbl">Standby message</label>
         <select data-key="standby_text">${STANDBY_TEXT.map(([v, n]) => `<option value="${v}"${v === sbMode ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
       ${sbMode !== 'hidden' ? `
@@ -1845,7 +1878,7 @@ class StormAudioCardEditor extends HTMLElement {
     }));
     this.querySelectorAll('[data-key]').forEach((el) => {
       const key = el.dataset.key;
-      const reveals = ['show_when_off', 'collapsible', 'show_dot', 'standby_text'].includes(key);
+      const reveals = ['when_off', 'collapsible', 'show_dot', 'standby_text'].includes(key);
       if (el.type === 'checkbox') el.addEventListener('change', () => { this._set(key, el.checked); if (reveals) this._render(); });
       else el.addEventListener('change', () => { this._set(key, el.value.trim()); if (reveals) this._render(); });
     });
@@ -1936,7 +1969,7 @@ class StormAudioCardEditor extends HTMLElement {
 // Test hooks (pure helpers; no effect in the browser)
 StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
-  normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
+  WHEN_OFF, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
   orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels,
 };
