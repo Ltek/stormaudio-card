@@ -2,7 +2,7 @@
 
 A Home Assistant Dashboard **custom card** for **StormAudio / Focal / Bryston processors** (ISP / ISR series, Focal Astral 16, Bryston SP4): power, source, audio format and video status at a glance, plus collapsible sections for listening, audio processing, video info, zones, 12V triggers, the front panel and full device info — all in one card with a visual editor. Same design as the [JVC Projector Card](https://github.com/Ltek/jvc-projector-card) and [Lumagen Card](https://github.com/Ltek/lumagen-card).
 
-Current build: **v2026.10.14.5** · full history in [CHANGELOG.md](CHANGELOG.md)
+Current build: **v2026.10.15.7** · full history in [CHANGELOG.md](CHANGELOG.md)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ltek&repository=stormaudio-card&category=plugin)
 
@@ -101,10 +101,11 @@ Everything is in the visual editor (Device · Card & sections · Chips · Icons 
 | `collapsible` | `false` | Tap the header to collapse the card to just the header while on. |
 | `start_collapsed` | `false` | With `collapsible`, start collapsed. |
 | `open_sections` | | Sections already open when the Dashboard loads: `volume` (with `volume_collapsible`), `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info`. |
-| `hide_sources` · `hide_presets` · `hide_dolby` · `hide_sphere` | | Chips to hide, by the integration's value. The editor's **Chips** panel lists them. |
+| `section_order` | card order | The order the body sections render in. Set it in the editor (Card & sections → Sections): one row per section with its icon, ↑ / ↓ to move it, **Open** (start open) and an **eye** to show or hide it. The status area always stays on top; its row has eyes for the audio flow, video flow and channel layout, and Volume's row has a **Collapsible** toggle. Any ids you omit are appended in the default order. |
+| `hide_sources` · `hide_presets` · `hide_dolby` · `hide_sphere` | | Chips to hide, by the integration's value. The editor's **Chips** panel lists them, each with an eye to show or hide it. |
 | `show_audio_flow` · `show_video_flow` | `true` | The two status flows: **audio** (source audio › processing › output — what the source sends, what the processor does with it, what plays) and **video** (input › signal › color). `show_status` hides both and the tags. |
 | `volume_collapsible` | `false` | `false`: the Volume block is always shown. `true`: it is a collapsible section like the others. |
-| `show_speaker_layout` | `false` | Show the speaker layout (e.g. 7.1.4) in the audio flow's Output box. |
+| `show_speaker_layout` | `false` | Show the channel layout with its channel count (e.g. `7.1.4 · 12 ch`) in the audio flow's Output box. Taken from the source's channel format — the processor exposes only an opaque output config ID, not a readable layout. |
 | `show_status` · `show_volume` · `show_listening` · `show_audio` · `show_decoding` · `show_video` · `show_zones` · `show_triggers` · `show_frontpanel` · `show_info` | `true` | Turn parts off (empty sections hide themselves regardless). |
 | `accent_color` · `warming_color` | theme primary · orange | Context colors. |
 | `icons:` | | `header`, `volume`, `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info` — any MDI name; `mdi:` is optional. |

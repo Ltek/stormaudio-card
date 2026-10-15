@@ -1,5 +1,14 @@
 # Changelog
 
+## v2026.10.15.7
+
+- **Eye icons instead of checkboxes** for show/hide, per the design guide (same as the Lumagen and JVC cards). The **Sections** list is now one row per section — its icon, name, ↑ / ↓, **Open** (start open) and an eye. The status row stays pinned on top and carries eyes for the audio flow, video flow and channel layout; Volume's row has a **Collapsible** toggle (and Open once it is collapsible). The separate "Other section options" and "Start open" lists are gone. The **Chips** panel uses an eye per chip. Hidden rows are dimmed; **Reset to default order** appears once the order changes.
+
+## v2026.10.15.6
+
+- **Reorder the sections.** Card & sections → Sections now lists every body section with ▲ / ▼ buttons; the order you set is the order they render. The status area stays pinned on top. Saved as `section_order` (only when it differs from the default). The per-section show / hide checkboxes live on the same rows.
+- **Channel count on the audio format.** Where the source reports an `X.Y.Z` layout (e.g. 7.1.4), the Source audio box, the optional Output layout line and the Info row now show the total channel count too (`7.1.4 · 12 ch`). Non-layout formats (Dolby Atmos, PCM…) are unchanged. The processor does not expose an output speaker layout (only an opaque config ID), so the readable count is taken from the source format.
+
 ## v2026.10.14.5
 
 - **Volume** is its own block (slider, − / +, Mute, Dim) right under the status, always shown. `volume_collapsible: true` makes it a collapsible section instead.
