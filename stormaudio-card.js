@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.15.13
+// Version: v2026.10.22.14
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.15.13';
+const BUILD_NUMBER = 'v2026.10.22.14';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -262,6 +262,38 @@ function fmtChannels(fmt) {
   return n ? `${base} · ${n} ch` : base;
 }
 
+// Object-based formats render to every speaker in the layout, even when decoded natively.
+const OBJECT_FORMATS = /atmos|dts:x|dtsx|auro-3d|auro3d|mpeg-h|mpegh|imax/i;
+
+/** What the audio flow shows, from the raw sensor values:
+ *  { src, srcCh, proc, procNote, procWarn, out, outCh, effects } — one place for the logic. */
+function audioFlow({ stream, channels, modeRaw, engaged, stormxt, effects = [], outputLayout = '' }) {
+  const src = nice(stream);
+  const srcCh = fmtChannels(channels);
+  const mode = nice(modeRaw, SURROUND_MODE);
+  const known = okState(modeRaw);
+  const notEngaged = known && engaged === false;
+  const isDownmix = !notEngaged && /downmix/i.test(mode);
+  const upmixing = known && !notEngaged && !isDownmix && !/^native$/i.test(mode);
+  const xt = stormxt === 'on';
+  const layout = fmtChannels(outputLayout);
+  // Processing: StormXT first when on, else the upmixer / Downmix / Native.
+  const proc = !known && !xt ? '' : xt ? 'StormXT' : upmixing ? mode : isDownmix ? 'Downmix' : 'Native';
+  const notes = [xt && upmixing ? mode : '', xt && isDownmix ? 'Downmix' : '', ...effects].filter(Boolean);
+  // Output: the format it renders (the upmixer's, Stereo for a downmix, else the source's) on how many channels.
+  const out = upmixing ? mode : isDownmix ? 'Stereo' : src;
+  const fillsAll = upmixing || xt || OBJECT_FORMATS.test(String(stream || ''));
+  const outCh = isDownmix ? fmtChannels('2.0')
+    : fillsAll ? (layout || 'All speakers')
+      : srcCh;
+  return {
+    src, srcCh, proc,
+    procNote: notEngaged ? `${mode} not engaged` : (notes[0] || ''),
+    procNote2: notEngaged ? notes.join(' · ') : notes.slice(1).join(' · '),
+    procWarn: notEngaged, out, outCh,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Config — byte-stable: only non-default keys are emitted
 // ---------------------------------------------------------------------------
@@ -282,7 +314,8 @@ const DEFAULTS = {
   show_listening: true,
   show_volume: true,
   volume_collapsible: false,
-  show_speaker_layout: false,
+  show_speaker_layout: true,
+  output_layout: '', // your speaker layout, e.g. '7.3.6' (the processor exposes only a config ID)
   show_audio: true,
   show_decoding: true,
   show_video: true,
@@ -295,6 +328,9 @@ const DEFAULTS = {
   accent_color: '',
   warming_color: '',
 };
+// Entities shown in the Audio section (it shows when any of them exists).
+const AUDIO_KEYS = ['loudness', 'bass', 'treble', 'center_enhance', 'surround_enhance', 'lfe_enhance', 'brightness',
+  'dialog_control', 'lipsync', 'auro_strength', 'lfe_dim'];
 // Collapsible sections, in card order: [id, label]
 const FOLDS = [
   ['volume', 'Volume'], ['listening', 'Listening'], ['audio', 'Audio'], ['decoding', 'Decoding & effects'], ['video', 'Video'],
@@ -393,7 +429,7 @@ const HIDE_LISTS = {
 const SECTION_ITEMS = {
   status: [['aflow', 'Audio flow (whole row)', '[data-k="aflow"]', 'show_audio_flow'],
     ['ain', 'Source audio box', '[data-item="box-ain"]'], ['aproc', 'Processing box', '[data-item="box-aproc"]'],
-    ['aout', 'Output box', '[data-item="box-aout"]'], ['layout', 'Channel layout under Output', '', 'show_speaker_layout'],
+    ['aout', 'Output box', '[data-item="box-aout"]'], ['layout', 'Output channel layout', '', 'show_speaker_layout'],
     ['vflow', 'Video flow (whole row)', '[data-k="vflow"]', 'show_video_flow'],
     ['vin', 'Video in box', '[data-item="box-vin"]'], ['vsig', 'Signal box', '[data-item="box-vsig"]'],
     ['vcol', 'Color box', '[data-item="box-vcol"]'], ['tags', 'Status tags', '[data-k="tags"]']],
@@ -623,6 +659,7 @@ function stripPrefix(name, deviceName) {
   return name;
 }
 
+const DRAG_HOLD_MS = 1500; // a slider input holds off state updates this long (renewed while dragging)
 const PENDING_MS = 12000; // how long a tapped option shows as "sending" before the poll catches up
 
 // ---------------------------------------------------------------------------
@@ -815,7 +852,7 @@ class StormAudioCard extends HTMLElement {
     this._preview = false;
     this._open = null;
     this._pending = {};
-    this._dragging = false;
+    this._dragUntil = 0;
   }
 
   setConfig(config) {
@@ -904,7 +941,7 @@ class StormAudioCard extends HTMLElement {
     const dot = (where) => (dotAt === where ? `<span class="sa-dot at-${where}" data-k="dot" data-pos="${where}"></span>` : '');
     if (this._collapsed === undefined) this._collapsed = cfg(c, 'collapsible') && cfg(c, 'start_collapsed');
     const box = (id, title, bar) => `<div class="sa-box" data-item="box-${id}"><div class="sa-box-h">${title}</div><div class="sa-box-t" data-k="${id}_t"></div>`
-      + `${bar ? '<div class="sa-vol"><span data-k="vol_bar"></span></div>' : `<div class="sa-box-s" data-k="${id}_1"></div>`}<div class="sa-box-s" data-k="${id}_2"></div></div>`;
+      + `<div class="sa-box-s" data-k="${id}_1"></div>${bar ? '<div class="sa-vol"><span data-k="vol_bar"></span></div>' : ''}<div class="sa-box-s" data-k="${id}_2"></div></div>`;
     const arrow = '<ha-icon class="sa-arrow" icon="mdi:chevron-right"></ha-icon>';
     this._setHTML(`
       <style>${CARD_CSS}</style>
@@ -954,8 +991,8 @@ class StormAudioCard extends HTMLElement {
       if (d.open) this._open.add(d.dataset.sec); else this._open.delete(d.dataset.sec);
     }));
     const range = this._k.vol_range;
-    if (this._once(range, 'range')) range.addEventListener('input', () => { this._dragging = true; this._k.vol_val.textContent = `${range.value}`; });
-    if (this._once(range, 'range-change')) range.addEventListener('change', () => { this._dragging = false; this._setNumber('volume', Number(range.value)); });
+    if (this._once(range, 'range')) range.addEventListener('input', () => { this._dragStart(); this._k.vol_val.textContent = `${range.value}`; });
+    if (this._once(range, 'range-change')) range.addEventListener('change', () => { this._dragEnd(); this._setNumber('volume', Number(range.value)); });
     if (this._once(this._root, 'bind')) this._bind();
     this._built = true;
     this._sig = '';
@@ -979,18 +1016,30 @@ class StormAudioCard extends HTMLElement {
     root.addEventListener('input', (e) => {
       const r = e.target.closest && e.target.closest('[data-range],[data-zrange]');
       if (!r || r.dataset.k === 'vol_range') return;
-      this._dragging = true;
+      this._dragStart();
       const out = r.closest('.sa-slider').querySelector('.sa-slider-v');
       if (out) out.textContent = this._fmtRange(r);
     });
     root.addEventListener('change', (e) => {
       const r = e.target.closest && e.target.closest('[data-range],[data-zrange]');
       if (!r || r.dataset.k === 'vol_range') return;
-      this._dragging = false;
+      this._dragEnd();
       if (r.dataset.range) this._setNumber(r.dataset.range, Number(r.value));
       else if (r.dataset.zrange) this._setEntityNumber(r.dataset.zrange, Number(r.value));
     });
   }
+
+  // A slider being dragged isn't overwritten by state updates. The hold expires on its own, so a
+  // drag that never sends 'change' (touch cancelled, released off the page) can't freeze the sliders.
+  _dragStart() {
+    this._dragUntil = Date.now() + DRAG_HOLD_MS;
+    clearTimeout(this._dragTimer);
+    this._dragTimer = setTimeout(() => { if (this._built && !this._isDragging()) this._update(true); }, DRAG_HOLD_MS + 50);
+  }
+
+  _dragEnd() { this._dragUntil = 0; clearTimeout(this._dragTimer); }
+
+  _isDragging() { return Date.now() < this._dragUntil; }
 
   _fmtRange(r) {
     const unit = r.dataset.unit || '';
@@ -1070,13 +1119,15 @@ class StormAudioCard extends HTMLElement {
     this._update(true);
   }
 
-  _numStep(key, dir) {
+  /** Step a number by `size` entity steps, from the value last sent if it is still pending. */
+  _numStep(key, dir, size = 1) {
     const N = this._numState(key);
+    if (!dir || !N.id) return;
     const cur = this._pendingFor(N.id, N.value) ?? N.value;
-    if (cur !== null) this._setNumber(key, Number(cur) + dir * N.step);
+    if (cur !== null) this._setNumber(key, Number(cur) + dir * size * N.step);
   }
 
-  _run(action) {
+  _run(action, el) {
     const E = this._ents || {};
     switch (action) {
       case 'power': {
@@ -1087,10 +1138,9 @@ class StormAudioCard extends HTMLElement {
         else this._call('media_player', isOn ? 'turn_off' : 'turn_on', { entity_id: E.media });
         break;
       }
-      case 'vol-step': {
-        // dir carried on the button via closest()
+      case 'vol-step':
+        this._numStep('volume', Number(el && el.dataset.dir) || 0, cfg(this._config, 'volume_step'));
         break;
-      }
       case 'collapse':
         if (this._powerState !== 'on') break;
         this._collapsed = !this._collapsed;
@@ -1230,9 +1280,9 @@ class StormAudioCard extends HTMLElement {
     this.querySelectorAll('[data-sec]').forEach((el) => {
       const sec = el.dataset.sec;
       let show = cfg(c, { status: 'show_status' }[sec] || `show_${sec}`);
-      if (sec === 'listening') show = show && !!(E.volume || E.source || E.preset);
+      if (sec === 'listening') show = show && !!(E.source || E.preset || E.surround_mode);
       if (sec === 'volume') show = show && !!(E.volume || E.mute || E.dim);
-      if (sec === 'audio') show = show && !!(E.loudness || E.bass || E.treble || E.lfe_dim);
+      if (sec === 'audio') show = show && AUDIO_KEYS.some((k) => E[k]);
       if (sec === 'decoding') show = show && !!(E.dolby_mode || E.sphereaudio || E.auro_preset || E.drc || E.imax_mode || E.dolby_virtualizer || E.dialog_norm || E.center_spread);
       if (sec === 'video') show = show && !!(E.video_resolution || E.video_encoding);
       if (sec === 'zones') show = show && zones.length > 0;
@@ -1251,38 +1301,31 @@ class StormAudioCard extends HTMLElement {
     // audio flow: what the source sends › what the processor does › what plays
     const sm = st('surround_mode');
     const engaged = sm && sm.attributes ? sm.attributes.engaged : undefined;
-    set('ain_t', nice(v('stream_type')) || '—');
-    set('ain_1', fmtChannels(v('channel_format')) || '—');
-    set('ain_2', [nice(v('sample_rate')), source].filter(Boolean).join(' · ') || '—');
-    // Processing: what the processor does (native decode, upmix or downmix) and the effects on.
-    // Output: the format it renders — the source's own format, or the upmixer's.
-    const modeRaw = v('surround_mode');
-    const mode = nice(modeRaw, SURROUND_MODE);
-    const isNative = /^native$/i.test(mode);
-    const isDownmix = /downmix/i.test(mode);
-    const upmixing = okState(modeRaw) && !isNative && !isDownmix && engaged !== false;
-    set('aproc_t', !okState(modeRaw) ? '—' : engaged === false || isNative ? 'Native' : isDownmix ? 'Downmix' : 'Upmix');
+    // Source › Processing › Output, e.g. Dolby Digital 5.1 › StormXT › Dolby Digital 7.3.6.
     const effects = [
       ['Dolby', pretty(DOLBY_MODE, this._currentOption('dolby_mode')), 'Off'],
       ['Sphere', nice(this._currentOption('sphereaudio'), SPHERE_EFFECT), 'Bypass'],
       ['Auro', nice(this._currentOption('auro_preset'), AURO_PRESET), ''],
       ['Loudness', pretty(LOUDNESS, this._currentOption('loudness')), 'Off'],
     ].filter(([, val, off]) => val && val !== off).map(([n, val]) => `${n} ${val}`);
-    if (v('stormxt') === 'on') effects.push('StormXT');
-    // engaged === false: the selected upmixer can't run on this content.
-    set('aproc_1', engaged === false ? `${mode} not engaged` : (effects[0] || '—'));
-    if (K.aproc_1) K.aproc_1.classList.toggle('warn', engaged === false);
-    set('aproc_2', (engaged === false ? effects[0] : effects[1]) || '—');
-    set('aout_t', upmixing ? mode : isDownmix ? 'Stereo' : (nice(v('stream_type')) || '—'));
+    const F = audioFlow({ stream: v('stream_type'), channels: v('channel_format'), modeRaw: v('surround_mode'), engaged,
+      stormxt: v('stormxt'), effects, outputLayout: cfg(c, 'output_layout') });
+    set('ain_t', F.src || '—');
+    set('ain_1', F.srcCh || '—');
+    set('ain_2', [nice(v('sample_rate')), source].filter(Boolean).join(' · ') || '—');
+    set('aproc_t', F.proc || '—');
+    set('aproc_1', F.procNote || '—');
+    if (K.aproc_1) K.aproc_1.classList.toggle('warn', F.procWarn);
+    set('aproc_2', F.procNote2 || '—');
+    set('aout_t', F.out || '—');
+    set('aout_1', F.outCh || '—');
+    if (K.aout_1) K.aout_1.hidden = !cfg(c, 'show_speaker_layout');
     const volNow = this._numState('volume');
     const volPct = volNow.value === null ? null : ((volNow.value - volNow.min) / Math.max(1, volNow.max - volNow.min)) * 100;
     const vw = `${Math.max(0, Math.min(100, volPct || 0)).toFixed(1)}%`;
     if (K.vol_bar && K.vol_bar.style.width !== vw) K.vol_bar.style.width = vw;
     const volText = v('mute') === 'on' ? 'Muted' : (volNow.value === null ? '' : `Volume ${fmtNum(volNow.value, { unit: volNow.unit })}`);
-    // Output layout: the processor only exposes an opaque speaker-config ID, not an X.Y.Z layout,
-    // so the readable channel count comes from the source's channel format when available.
-    const layout = cfg(c, 'show_speaker_layout') ? fmtChannels(v('channel_format')) : '';
-    set('aout_2', [layout, volText].filter(Boolean).join(' · ') || '—');
+    set('aout_2', volText || '—');
     // video flow: input › signal › color
     const res = v('video_resolution');
     const rate = v('video_refresh');
@@ -1311,7 +1354,7 @@ class StormAudioCard extends HTMLElement {
     // --- Listening section ---
     const vol = this._numState('volume');
     const volShown = this._pendingFor(vol.id, vol.value) ?? vol.value;
-    if (!this._dragging) {
+    if (!this._isDragging()) {
       const range = K.vol_range;
       ['min', 'max'].forEach((a) => { if (range.getAttribute(a) !== String(vol[a])) range.setAttribute(a, String(vol[a])); });
       if (volShown !== null && range.value !== String(volShown)) range.value = String(volShown);
@@ -1378,7 +1421,9 @@ class StormAudioCard extends HTMLElement {
     const peek = (sec, text) => { const el = this.querySelector(`[data-peek="${sec}"]`); if (el && el.textContent !== text) el.textContent = text; };
     peek('listening', [source, nice(v('surround_mode'), SURROUND_MODE)].filter(Boolean).join(' · '));
     peek('audio', okState(this._currentOption('loudness')) && this._currentOption('loudness') !== 'Off' ? `Loudness ${pretty(LOUDNESS, this._currentOption('loudness'))}` : '');
-    peek('decoding', [pretty(DOLBY_MODE, this._currentOption('dolby_mode')), nice(this._currentOption('sphereaudio'), SPHERE_EFFECT)].filter(Boolean).join(' · '));
+    const dolbyPeek = pretty(DOLBY_MODE, this._currentOption('dolby_mode'));
+    const spherePeek = nice(this._currentOption('sphereaudio'), SPHERE_EFFECT);
+    peek('decoding', [dolbyPeek !== 'Off' ? dolbyPeek : '', spherePeek !== 'Bypass' ? spherePeek : ''].filter(Boolean).join(' · '));
     peek('volume', [volShown !== null ? `Vol ${Math.round(volShown)}` : '', v('mute') === 'on' ? 'Muted' : ''].filter(Boolean).join(' · '));
     peek('video', okState(res) ? `${res}${okState(rate) ? ' · ' + rate : ''}` : '');
     peek('zones', zones.length ? `${zones.length} zone${zones.length > 1 ? 's' : ''}` : '');
@@ -1394,6 +1439,7 @@ class StormAudioCard extends HTMLElement {
       ['Surround mode', nice(v('surround_mode'), SURROUND_MODE)],
       ['StormXT', pretty(ON_OFF, v('stormxt'))],
       ['Speaker config', nice(v('active_speaker'))],
+      ['Speaker layout', fmtChannels(cfg(c, 'output_layout'))],
       ['Sample rate', nice(v('sample_rate'))],
       ['Stream type', nice(v('stream_type'))],
       ['Channel format', fmtChannels(v('channel_format'))],
@@ -1498,7 +1544,7 @@ class StormAudioCard extends HTMLElement {
           + `<span class="sa-slider-v" data-sval="${k}"></span></div>`;
       }).join('');
     }
-    if (this._dragging) return;
+    if (this._isDragging()) return;
     present.forEach(([k, , signed]) => {
       const N = this._numState(k);
       const shown = this._pendingFor(N.id, N.value) ?? N.value;
@@ -1583,7 +1629,7 @@ class StormAudioCard extends HTMLElement {
         this._update(true);
       }));
     }
-    if (!this._dragging) {
+    if (!this._isDragging()) {
       zones.forEach((z) => {
         if (z.ents.volume) {
           const s = hass.states[z.ents.volume];
@@ -1953,6 +1999,11 @@ class StormAudioCardEditor extends HTMLElement {
   /** Section-specific options shown in its edit panel. */
   _secOptions(id) {
     const c = this._config;
+    if (id === 'status') {
+      return `<div class="sae-group">Options</div>
+      <div class="sae-row"><label class="lbl">Speaker layout</label><input type="text" data-key="output_layout" value="${esc(cfg(c, 'output_layout'))}" placeholder="e.g. 7.3.6"></div>
+      <p class="sae-hint">Your speaker layout, shown with its channel count in the Output box when the processor fills all speakers (StormXT, an upmixer, or Atmos / DTS:X / Auro-3D). The processor reports only a config number, not the layout.</p>`;
+    }
     if (id === 'volume') {
       return `<div class="sae-group">Options</div>
       ${this._slider('volume_step', '− / + step', cfg(c, 'volume_step'), 1, 20, 1, '', (n) => `${n}`)}`;
@@ -2240,7 +2291,7 @@ StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
   WHEN_OFF, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
-  orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels,
+  orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels, audioFlow, AUDIO_KEYS,
 };
 
 if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, StormAudioCard);

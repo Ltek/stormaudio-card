@@ -1,5 +1,18 @@
 # Changelog
 
+## v2026.10.22.14
+
+- **Audio flow reads source › processing › output**, e.g. *Dolby Digital 5.1 · 6 ch › StormXT › Dolby Digital 7.3.6 · 16 ch*.
+  - **Source audio**: the encoding and its channels with the count.
+  - **Processing**: **StormXT** when it is on, else the upmixer (Dolby Surround, DTS Neural:X, Auro-Matic), *Downmix* or *Native*. Underneath: the upmixer running under StormXT, then the effects that are on. StormXT is no longer buried in the effects list.
+  - **Output**: the encoding it renders and the **channels it plays on** — your speaker layout when the processor fills every speaker (StormXT, an upmixer, or Atmos / DTS:X / Auro-3D / MPEG-H / IMAX), the source's layout for a native channel-based decode, 2.0 for a downmix. The volume moved to its own line under the bar.
+- **New `output_layout`** (Sections → pencil on Status → Options): your speaker layout, e.g. `7.3.6`. The processor reports only a config number, so the card needs it from you; without it an upmix reads *All speakers*. Also shown in Info.
+- `show_speaker_layout` now defaults to on and controls the Output channels line.
+- **Volume − / + work.** They did nothing in every earlier build; they now step the volume by `volume_step`, and quick presses add up.
+- A slider drag that never finished (touch cancelled, released off the page) no longer stops every slider from following the processor.
+- **Listening** no longer shows up empty when only the volume entity exists; **Audio** now also shows when only the enhance / dialog / lipsync sliders are present.
+- The collapsed **Decoding & effects** header leaves out values that are off (no more "Off · Bypass").
+
 ## v2026.10.15.13
 
 - **Merged sections follow their own checks.** A merged section's settings now show only when that section would show on its own — e.g. Picture merged elsewhere without its entities no longer leaves an empty heading, and merged controls never appear for a missing entity.
