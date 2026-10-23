@@ -1,5 +1,9 @@
 # Changelog
 
+## v2026.10.23.16
+
+- **Input and Output rows now carry the same information**: encoding, then channels. The sample rate (input only) moved off the channels row to the Input box's tooltip; it is still in Info.
+
 ## v2026.10.23.15
 
 - **Audio flow is two boxes, Input → Output, with the processing on the arrow.** Each box has about half the width, so the encoding and the channels fit.

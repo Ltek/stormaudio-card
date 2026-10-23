@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.23.15
+// Version: v2026.10.23.16
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.23.15';
+const BUILD_NUMBER = 'v2026.10.23.16';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -1346,7 +1346,12 @@ class StormAudioCard extends HTMLElement {
       stormxt: v('stormxt'), outputLayout: cfg(c, 'output_layout') });
     set('ain_h', source ? `Input · ${source}` : 'Input');
     set('ain_t', F.src || '—');
-    set('ain_1', [F.srcCh, nice(v('sample_rate'))].filter(Boolean).join(' · '));
+    // Same rows on both sides: encoding, then channels. The sample rate has no output counterpart, so it
+    // is on the box's tooltip (and in Info) rather than on the channels row.
+    set('ain_1', F.srcCh);
+    const ainBox = this.querySelector('[data-item="box-ain"]');
+    const ainTip = [F.src, F.srcCh, nice(v('sample_rate'))].filter(Boolean).join(' · ');
+    if (ainBox && ainBox.title !== ainTip) ainBox.title = ainTip;
     set('aproc_t', F.proc);
     set('aproc_1', F.procSub);
     const procEl = this.querySelector('[data-item="aproc"]');
