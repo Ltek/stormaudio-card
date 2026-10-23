@@ -1,139 +1,94 @@
 # StormAudio Card
 
-A Home Assistant Dashboard **custom card** for **StormAudio / Focal / Bryston processors** (ISP / ISR series, Focal Astral 16, Bryston SP4): power, source, audio format and video status at a glance, plus collapsible sections for listening, audio processing, video info, zones, 12V triggers, the front panel and full device info — all in one card with a visual editor. Same design as the [JVC Projector Card](https://github.com/Ltek/jvc-projector-card) and [Lumagen Card](https://github.com/Ltek/lumagen-card).
+A Home Assistant Dashboard card for **StormAudio, Focal and Bryston processors** (ISP / ISR series,
+Focal Astral 16, Bryston SP4). See at a glance what the source sends, what the processor does with it
+and what reaches your speakers, then reach every setting from one card, set up in a visual editor.
 
-Current build: **v2026.10.23.16** · full history in [CHANGELOG.md](CHANGELOG.md)
+Current build: **v2026.10.23.16** · full history in [CHANGELOG.md](CHANGELOG.md) · every YAML option in [OPTIONS.md](OPTIONS.md)
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ltek&repository=stormaudio-card&category=plugin)
-
-> Requires the **[StormAudio integration](https://github.com/Ltek/StormAudio)** (TCP/IP API, firmware 4.6r1 or later). The card exposes everything the integration provides.
+```
+ 〜  StormAudio ●                         HDMI 1 · Dolby Surround · Dolby Digital
+ ┌ INPUT · HDMI 1 ───────┐   StormXT    ┌ OUTPUT ───────────────┐
+ │ Dolby Digital         │   ───────►   │ Dolby Digital         │
+ │ 5.1 · 6 ch            │              │ 7.3.6 · 16 ch         │
+ │                       │              │ ▬▬▬▬▬▬▬▬░░░░   Vol 42 │
+ └───────────────────────┘              └───────────────────────┘
+ ┌ VIDEO · HDMI 1 ───────────────────────────────────────────────┐
+ │ 2160p60 · HDR10                                               │
+ │ BT.2020 · 10-bit                                              │
+ └───────────────────────────────────────────────────────────────┘
+ [DOLBY MOVIE] [HDR10]
+ [−] ━━━━━━━━━━━●━━━━━━━━━━━ [+]  42        [Mute] [Dim]
+ ◉ Listening   HDMI 1 · Dolby Surround                       ›
+ ♪ Audio                                                     ›
+ ▤ Decoding & effects   Movie                                ›
+```
 
 ---
 
-## What it shows
-
-Status sits on top. **Every control is in a collapsed section**, so nothing changes by accident; each collapsed header shows the current value.
-
-```
- 〜  StormAudio ●                       HDMI 1 · Dolby Surround · Dolby Atmos
- ┌ SOURCE AUDIO ┐   ┌ PROCESSING ────┐   ┌ OUTPUT ────┐
- │ Dolby Atmos  │ › │ Native         │ › │ Dolby Atmos│
- │ 7.1.4        │   │ Dolby Movie    │   │ ▬▬▬▬░░░░░  │
- │ 48 kHz·HDMI 1│   │ Sphere Lounge  │   │ Volume 42  │
- └──────────────┘   └────────────────┘   └────────────┘
- ┌ VIDEO IN ────┐   ┌ SIGNAL ────────┐   ┌ COLOR ─────┐
- │ HDMI 1       │ › │ 3840x2160      │ › │ BT.2020    │
- │ HDMI 1       │   │ 60Hz           │   │ 10-bit     │
- │ HDCP 2.3     │   │ HDR10          │   │ —          │
- └──────────────┘   └────────────────┘   └────────────┘
- [STORM] [STORMXT] [HDR10]
- ─  [−] ━━━━━━━━●━━━━━━━━ [+]  42   [Mute] [Dim]
- ◉ Listening  HDMI 1 · Native                      ›
- ♪ Audio      Loudness Low                         ›
- ▤ Decoding & effects  Movie · Lounge              ›
- ▣ Video      3840x2160 · 60Hz                     ›
- ⌁ Zones      2 zones                              ›
- ⚡ Triggers   1 trigger                            ›
- ▭ Front panel  Blue                               ›
- ⓘ Info       7.1.4                                ›
-```
-
-- **Header** — the icon is the power button: tap to toggle the processor on / standby. It shows the power state (context color when on; orange and pulsing while it is starting up or shutting down). The dot is the link: green = the integration reaches the processor, red = it can't; the summary then reads *Offline* in red.
-- **Standby** — choose what the card does while the processor is in standby / off: **hide the entire card**, **collapse to the header** (the default; you can still power on from it) or **keep expanded**. In the card editor it always starts expanded, so every section can be set up. Put the "Standby · tap the icon to power on" message below the title, inline, or hidden; or show a power button on the right. Optionally hide the card in standby (it always shows while you edit the Dashboard).
-- **Collapse** — optionally tap the header to collapse the card to just the header while the processor is on, and start collapsed.
-- **Status** — the audio flow and a video box, each can be hidden on its own. **Audio: Input → Output**, with what the processor does written on the arrow. *Input* (its header names the source, e.g. INPUT · HDMI 1): the encoding the source sends — Dolby Digital, Dolby Atmos, DTS:X, PCM… — then its channels with the count (`5.1 · 6 ch`); hover the box for the sample rate. *The arrow*: **StormXT** (with the upmixer it runs with underneath), the upmixer (Dolby Surround, DTS Neural:X, Auro-Matic), *Downmix*, or nothing for a plain native decode; struck through in orange when the chosen upmixer isn't engaged with this content (hover for why). *Output*: the encoding the processor renders — the upmixer when upmixing, Stereo for a downmix, else the source's format — and the channels it plays on, then the volume bar with *Vol 42* or *Muted*. For example *Dolby Digital 5.1 · 6 ch → StormXT → Dolby Digital 7.3.6 · 16 ch*. The output channels are your `output_layout` when the processor fills every speaker (StormXT, an upmixer, or an object format: Atmos, DTS:X, Auro-3D, MPEG-H, IMAX), the source's layout when it decodes a channel format natively, and 2.0 for a downmix. The processor reports only a speaker-config number, not the layout, so set `output_layout` (Sections → pencil on **Status** → Options); without it an upmix reads *All speakers*. Long names wrap to a second line instead of being cut off. On a narrow card the two boxes stack, with the arrow pointing down. **Video** is one box, since the processor passes video through: the HDMI port in the header, then mode and HDR (`2160p60 · HDR10`), then color space, depth, mode and copy protection. Video input, sync, copy protection and mode are integration sensors that are disabled by default; enable them to fill those details.
-- **Tags** appear only when active: MUTED, the effects that are on (DOLBY MOVIE, SPHERE LOUNGE, AURO …, LOUDNESS LOW), the video encoding (HDR10 / Dolby Vision / HLG…), DIM, LINK DOWN — and STORMXT when the audio flow is hidden (otherwise it is on the arrow).
-- **Volume** — a large volume slider with − / + and Mute / Dim pills, always shown under the status (not a collapsible section). Set `volume_collapsible: true` to make it one.
-- **Listening** — source, preset and surround-mode chips.
-- **Audio** — the settings used most: Loudness, then trim / enhance sliders (Bass, Treble, Center / Surround / LFE enhance, Brightness, Dialog, LipSync, Auro strength) and LFE Dim.
-- **Decoding & effects** — Dolby mode, SphereAudio, Auro preset, DRC and IMAX chips, and Dolby Virtualizer / Dialog Norm / Center Spread. A setting with nothing to choose (for example SphereAudio without its license) is hidden.
-- **Video** — resolution, refresh, encoding, color space / depth, mode, input, sync, copy protection (whichever sensors are enabled).
-- **Zones** — per-zone volume, mute, EQ and binaural mode, discovered automatically from the device's zone list. Appears only if you have enabled the per-zone entities.
-- **Triggers** — the 12V triggers, as on / off pills, discovered automatically. Appears only if you have enabled the trigger entities.
-- **Front panel** — color (with a matching swatch), standby delay, active / standby brightness. StormAudio-only (Focal / Bryston don't expose these). Appears only if those entities are enabled.
-- **Info** — power, source, preset, surround mode, StormXT, speaker config, sample rate, stream type, channel format, resolution and encoding, plus the connection state and a note listing disabled entities you can enable.
-
-The processor pushes state over its local TCP/IP API, but a tapped option still shows as **sending** (dashed, pulsing) until it confirms.
-
-### Entity resolution
-
-The StormAudio integration sets no `translation_key`, so the card resolves entities by the integration's **`unique_id` suffixes** (via the `media_player`'s unique id as the device prefix). Renamed entity IDs keep working. Entities that are **disabled by default** (zones, triggers, front panel, Video Mode / Input / Sync / Copy Protection, Auro, DRC, IMAX, Zone 2 source) simply don't appear until you enable them — the card hides their rows and sections.
-
 ## Installation
 
-### HACS
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ltek&repository=stormaudio-card&category=plugin)
 
-1. Click the badge above, or in HACS → **⋮ → Custom repositories** add `https://github.com/Ltek/stormaudio-card`, category **Dashboard**.
-2. Install **StormAudio Card** and reload the browser.
+1. Click the button above. It opens HACS in your Home Assistant with this repository filled in.
+2. Add it, then click **Download**. HACS registers the Dashboard resource for you.
+3. Hard-refresh the browser (Ctrl/Cmd + Shift + R).
+4. On a dashboard: **+ Add card → StormAudio Card**. With one processor there is nothing to set up.
 
-### Manual
+The card is a **custom repository**, so searching HACS won't find it. If the button doesn't work:
+HACS → **⋮ → Custom repositories** → `https://github.com/Ltek/stormaudio-card`, category **Dashboard**.
 
-Copy `stormaudio-card.js` to `/config/www/`, then add it under **Settings → Dashboards → ⋮ → Resources** as `/local/stormaudio-card.js` (JavaScript module).
+**Requires** the [StormAudio integration](https://github.com/Ltek/StormAudio) (TCP/IP API, firmware
+4.6r1 or later). The card uses everything the integration provides.
 
-## Setup
+---
 
-Add a card → search **StormAudio Card**. With one processor there is nothing to configure.
+## Features
 
-Minimal YAML:
+### See the whole signal path
+- **Input → Output** for audio, with what the processor does written on the arrow: **StormXT**, an
+  upmixer (Dolby Surround, DTS Neural:X, Auro-Matic), Downmix, or nothing for a native decode.
+- Both boxes show the **encoding and the channels**, with the channel count, e.g.
+  *Dolby Digital 5.1 · 6 ch → StormXT → Dolby Digital 7.3.6 · 16 ch*.
+- Set your speaker layout once and the Output box shows it whenever the processor fills every speaker.
+- An upmixer that is selected but **can't run on the current content** is struck through in orange.
+- **Video** in one box: HDMI port, `2160p60 · HDR10`, color space, bit depth and copy protection.
+- **Tags** for what's switched on right now: muted, Dolby mode, SphereAudio, Auro, Loudness, HDR, dim.
 
-```yaml
-type: custom:stormaudio-card
-```
+### Control it without the risk
+- **Volume** is always at hand: a large slider, − / + and Mute / Dim.
+- **Every other control sits in a collapsed section**, so a stray tap can't change your sound. Each
+  collapsed header shows the current value.
+- **Listening**: source, preset and surround mode. **Audio**: loudness, bass / treble, center /
+  surround / LFE enhance, dialog, lip sync. **Decoding & effects**: Dolby mode, SphereAudio, Auro,
+  DRC, IMAX and the Dolby options.
+- **Zones**, **12V triggers** and the **front panel** appear by themselves once you enable those
+  entities in the integration.
+- A tapped option shows as *sending* until the processor confirms it.
 
-To show zones, triggers or the front panel, enable those entities in **Settings → Devices & services → StormAudio → device → Entities** — the card then shows the matching section automatically.
+### Power and standby
+- The header icon is the power button, and it shows starting up / shutting down.
+- A link dot shows whether Home Assistant can reach the processor.
+- In standby, hide the card, collapse it to the header, or keep it expanded.
 
-## Options
+### Make it yours
+- **Reorder, rename, hide and merge sections**, and hide single settings or chips you never use.
+- Your own icons, an accent color, and sizes and colors for every part of the card, from your theme or
+  your own.
+- Everything is in the visual editor; YAML is optional. Only settings you change are saved.
 
-Everything is in the visual editor (Card (with the device picker) · Sections · Chips · Icons · Appearance). YAML keys are only written when they differ from the default.
+### Works with your setup
+- Finds the processor's entities by their unique IDs, so **renamed entities keep working**.
+- Settings your processor or license doesn't have simply don't appear: no empty rows, no error tiles.
+- On a narrow card the boxes stack.
 
-| Key | Default | Description |
-|---|---|---|
-| `device` | first processor | Device ID, if you have more than one StormAudio processor. |
-| `title` | `StormAudio` | Header title. |
-| `strip_prefix` | `true` | Strip the device name from zone / trigger labels ("ISP Zone 2" → "Zone 2"). |
-| `when_off` | `collapse` | While the processor is in standby / off: `hide` (hide the entire card), `collapse` (shrink to the header, so you can power on from it) or `expanded` (keep every section shown). The card editor always shows it expanded. The old `show_when_off: false` still works and means `hide`. |
-| `standby_text` | `below` | Standby message: `below` the title, `inline` with it, or `hidden`. |
-| `standby_message` | stock text | Your own standby message; empty = "Standby · tap the icon to power on". |
-| `standby_button` | `false` | In standby, replace the right-hand "Standby" with a power button. |
-| `show_dot` | `true` | Show the link dot. |
-| `dot_position` | `title` | `title`, `right`, or `icon` (replaces the header icon; it is still the power button). |
-| `volume_step` | `1` | How much − / + change the volume (1–20). Editor: Sections → pencil on **Volume** → Options. |
-| `collapsible` | `false` | Tap the header to collapse the card to just the header while on. |
-| `start_collapsed` | `false` | With `collapsible`, start collapsed. |
-| `open_sections` | | Sections already open when the Dashboard loads: `volume` (with `volume_collapsible`), `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info`. |
-| `section_order` | card order | The order the sections render in: `status`, `volume`, `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info`. Set it in the editor (the **Sections** panel): one row per section with its icon, ↑ / ↓ to move it, **Open** (start open) and an **eye** to show or hide it. Every section can move, the status area included (its row also has eyes for the audio flow, video flow and channel layout); Volume's row has a **Collapsible** toggle. An order saved before status could move keeps status on top. Any ids you omit are appended in the default order. |
-| `section_names` | | Your own name per section, e.g. `{ remote: Menu keys }`. Editor: the **pencil** on a section row → Name. |
-| `hidden_items` | | Single settings to hide, as `section.setting`, e.g. `audio.bass`, `status.aproc` (the processing label on the arrow), `status.vdet` (the video details line), `volume.dim`. Editor: pencil → **Settings**, one eye per setting. Settings that already have their own option (menu shortcuts, flows…) use that option instead. |
-| `section_merge` | | Show a section's settings inside another section, e.g. `decoding: audio`: the section disappears and its visible settings appear at the end of the target, under its name. Not into a hidden section, and no chains (a section others merge into stays its own). Editor: pencil → **Merge**. |
-| `hide_sources` · `hide_presets` · `hide_dolby` · `hide_sphere` | | Chips to hide, by the integration's value. The editor's **Chips** panel lists them, each with an eye to show or hide it. |
-| `show_audio_flow` · `show_video_flow` | `true` | The two status flows: **audio** (source audio › processing › output — what the source sends, what the processor does with it, what plays) and **video** (input › signal › color). `show_status` hides both and the tags. |
-| `volume_collapsible` | `false` | `false`: the Volume block is always shown. `true`: it is a collapsible section like the others. |
-| `output_layout` | | Your speaker layout, e.g. `7.3.6`. Shown with its channel count (`7.3.6 · 16 ch`) in the Output box and in Info. The processor exposes only an opaque speaker-config ID, so the card can't read it. Editor: Sections → pencil on **Status** → Options. |
-| `show_speaker_layout` | `true` | Show the channels line in the Output box. |
-| `show_status` · `show_volume` · `show_listening` · `show_audio` · `show_decoding` · `show_video` · `show_zones` · `show_triggers` · `show_frontpanel` · `show_info` | `true` | Turn parts off (empty sections hide themselves regardless). |
-| `accent_color` · `warming_color` | theme primary · orange | Context colors. |
-| `icons:` | | `header`, `volume`, `listening`, `audio`, `decoding`, `video`, `zones`, `triggers`, `frontpanel`, `info` — any MDI name; `mdi:` is optional. |
-| `styles:` | | Sizes (px) and colors (any CSS color or theme variable) — see below. |
-
-**`styles:` keys** — sizes: `card_radius` `card_padding` `standby_indent` `header_icon_size` `title_size` `summary_size` `section_icon_size` `section_title_size` `subtitle_size` `text_size` `secondary_size` `chip_size` `icon_size`; colors: `card_background` `card_border_color` `box_background` `divider_color` `header_icon_color` `title_color` `summary_color` `section_icon_color` `section_title_color` `subtitle_color` `text_color` `secondary_color` `chip_color` `chip_background` `chip_border_color` `icon_color`.
-
-Backgrounds and borders (`card_background`, `card_border_color`, `box_background`, `divider_color`, `chip_background`, `chip_border_color`) also accept `transparent` — the editor offers it as a choice.
-
-Example — a blue accent, listening open on load, no "Analog" source chip:
-
-```yaml
-type: custom:stormaudio-card
-title: Theater
-open_sections: [listening]
-hide_sources: [Analog]
-accent_color: '#2196F3'
-styles:
-  card_border_color: '#2196F3'
-```
+---
 
 ## Credits
 
-- **[StormAudio](https://www.stormaudio.com)** for the published TCP/IP API this card and its integration are built around.
-- Focal and Bryston units share the same API (Front Panel Color excepted).
+- **[StormAudio](https://www.stormaudio.com)** for the published TCP/IP API this card and its
+  integration are built around. Focal and Bryston units share the same API (front panel color excepted).
+- Same design as the [JVC Projector Card](https://github.com/Ltek/jvc-projector-card) and the
+  [Lumagen Card](https://github.com/Ltek/lumagen-card).
 
 MIT licensed — see [LICENSE](LICENSE).
