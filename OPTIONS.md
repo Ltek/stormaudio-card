@@ -23,6 +23,7 @@ pencil on each row for its name, settings, merge and options) · **Chips** · **
 | `start_collapsed` | `false` | With `collapsible`, start collapsed. |
 | `show_dot` | `true` | Show the link dot (green: reachable, red: not). |
 | `dot_position` | `title` | `title` (right of the title), `right` (far right) or `icon` (replaces the header icon; it is still the power button). |
+| `stack_when_narrow` | `auto` | Put the status boxes one above the other: `auto` only when the status area is narrower than 260 px (a phone in portrait stays side by side; a small grid column stacks), `always`, or `never`. Editor: Sections → pencil on **Status** → Options. |
 
 ## Power & standby
 

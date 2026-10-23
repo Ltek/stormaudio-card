@@ -1,5 +1,10 @@
 # Changelog
 
+## v2026.10.23.17
+
+- **The status boxes stay side by side on a phone.** They stacked whenever the status area was under 360 px, which is every phone in portrait. Now they stack only under 260 px (e.g. a small grid column).
+- **New `stack_when_narrow`** (Sections → pencil on Status → Options): *Only on a very narrow card* (default), *Always* or *Never*.
+
 ## v2026.10.23.16
 
 - **Input and Output rows now carry the same information**: encoding, then channels. The sample rate (input only) moved off the channels row to the Input box's tooltip; it is still in Info.

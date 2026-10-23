@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.23.16
+// Version: v2026.10.23.17
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.23.16';
+const BUILD_NUMBER = 'v2026.10.23.17';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -333,6 +333,7 @@ const DEFAULTS = {
   show_info: true,
   volume_step: 1,
   strip_prefix: true, // drop the device name prefix from entity-derived labels
+  stack_when_narrow: 'auto', // status boxes on a narrow card: auto (stack under 260 px) | always | never
   accent_color: '',
   warming_color: '',
 };
@@ -520,6 +521,7 @@ function normalizeSectionEdits(c, out) {
 const WHEN_OFF = [['hide', 'Hide the entire card'], ['collapse', 'Collapse to the header'], ['expanded', 'Keep expanded']];
 // Ancestors that mean "the Dashboard is being edited / this is the editor preview".
 const EDITOR_WRAPPERS = ['hui-card-preview', 'hui-dialog-edit-card', 'hui-card-edit-mode', 'hui-card-options', 'hui-section-edit-mode'];
+const STACK_MODES = [['auto', 'Only on a very narrow card'], ['always', 'Always'], ['never', 'Never (always side by side)']];
 const STANDBY_TEXT = [['below', 'Below the title'], ['inline', 'Inline with the title'], ['hidden', 'Hidden']];
 
 /** String list: trimmed, de-duplicated, empties dropped. */
@@ -586,6 +588,7 @@ function normalizeConfig(raw) {
   }
   const known = ['type', 'icons', 'styles', 'open_sections', 'section_order', 'section_names', 'hidden_items', 'section_merge'];
   if (out.when_off !== undefined && !WHEN_OFF.some(([v]) => v === out.when_off)) delete out.when_off;
+  if (out.stack_when_narrow !== undefined && !STACK_MODES.some(([v]) => v === out.stack_when_narrow)) delete out.stack_when_narrow;
   normalizeSectionEdits(c, out);
   Object.keys(c).forEach((k) => {
     if (k === 'show_when_off') return; // replaced by when_off
@@ -632,7 +635,7 @@ function rootStyleVars(config) {
 /** Classes on the card root that depend on config (constant stylesheet, no interpolation). */
 function rootClasses(config) {
   const st = config.styles || {};
-  const cls = ['sa'];
+  const cls = ['sa', `stack-${cfg(config, 'stack_when_narrow')}`];
   if (st.card_border_color) cls.push('has-border');
   if (st.card_background === 'transparent') cls.push('is-flat');
   return cls.join(' ');
@@ -735,11 +738,16 @@ const CARD_CSS = `
 .sa-volrow .sa-vol { flex: 1 1 auto; margin: 0; }
 .sa-vol-v { flex: 0 0 auto; font-size: var(--sa-secondary-size, 12px); color: var(--sa-secondary-color, var(--secondary-text-color)); font-variant-numeric: tabular-nums; }
 /* Narrow card: stack Input over Output, the arrow points down with the processing beside it. */
-@container (max-width: 360px) {
-  .sa-flow2 { flex-direction: column; }
-  .sa-flow2 > .sa-link { max-width: none; flex-direction: row-reverse; gap: 6px; }
-  .sa-flow2 > .sa-link .sa-arrow { transform: rotate(90deg); }
+/* Stacking (stack_when_narrow): auto stacks the boxes only on a really narrow card (status area under
+   260 px — a phone in portrait stays side by side); always stacks them; never keeps them side by side. */
+@container (max-width: 260px) {
+  .sa.stack-auto .sa-flow2 { flex-direction: column; }
+  .sa.stack-auto .sa-flow2 > .sa-link { max-width: none; flex-direction: row-reverse; gap: 6px; }
+  .sa.stack-auto .sa-flow2 > .sa-link .sa-arrow { transform: rotate(90deg); }
 }
+.sa.stack-always .sa-flow2 { flex-direction: column; }
+.sa.stack-always .sa-flow2 > .sa-link { max-width: none; flex-direction: row-reverse; gap: 6px; }
+.sa.stack-always .sa-flow2 > .sa-link .sa-arrow { transform: rotate(90deg); }
 .sa-uhide, .sa-away { display: none !important; }
 .sa-merged { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sa-divider-color, rgba(127,127,127,0.2)); }
 .sa-merged-h { margin-bottom: 4px; font-size: var(--sa-subtitle-size, 10px); letter-spacing: .08em; text-transform: uppercase;
@@ -2045,7 +2053,10 @@ class StormAudioCardEditor extends HTMLElement {
     if (id === 'status') {
       return `<div class="sae-group">Options</div>
       <div class="sae-row"><label class="lbl">Speaker layout</label><input type="text" data-key="output_layout" value="${esc(cfg(c, 'output_layout'))}" placeholder="e.g. 7.3.6"></div>
-      <p class="sae-hint">Your speaker layout, shown with its channel count in the Output box when the processor fills all speakers (StormXT, an upmixer, or Atmos / DTS:X / Auro-3D). The processor reports only a config number, not the layout.</p>`;
+      <p class="sae-hint">Your speaker layout, shown with its channel count in the Output box when the processor fills all speakers (StormXT, an upmixer, or Atmos / DTS:X / Auro-3D). The processor reports only a config number, not the layout.</p>
+      <div class="sae-group">Layout</div>
+      <div class="sae-row"><label class="lbl">Stack the boxes</label><select data-key="stack_when_narrow">${STACK_MODES.map(([v, n]) => `<option value="${v}"${v === cfg(c, 'stack_when_narrow') ? ' selected' : ''}>${n}</option>`).join('')}</select></div>
+      <p class="sae-hint">Put the boxes one above the other. <b>Only on a very narrow card</b> keeps them side by side on a phone and stacks them when the card is narrower still (e.g. a small grid column).</p>`;
     }
     if (id === 'volume') {
       return `<div class="sae-group">Options</div>
@@ -2332,7 +2343,7 @@ class StormAudioCardEditor extends HTMLElement {
 // Test hooks (pure helpers; no effect in the browser)
 StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
-  WHEN_OFF, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
+  WHEN_OFF, STACK_MODES, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
   orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels, audioFlow, AUDIO_KEYS, fmtVideoMode,
 };
