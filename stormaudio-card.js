@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.22.14
+// Version: v2026.10.23.15
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.22.14';
+const BUILD_NUMBER = 'v2026.10.23.15';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -266,32 +266,40 @@ function fmtChannels(fmt) {
 const OBJECT_FORMATS = /atmos|dts:x|dtsx|auro-3d|auro3d|mpeg-h|mpegh|imax/i;
 
 /** What the audio flow shows, from the raw sensor values:
- *  { src, srcCh, proc, procNote, procWarn, out, outCh, effects } — one place for the logic. */
-function audioFlow({ stream, channels, modeRaw, engaged, stormxt, effects = [], outputLayout = '' }) {
+ *  { src, srcCh, proc, procSub, procWarn, procTitle, out, outCh }.
+ *  `proc` is the label on the arrow between Input and Output: StormXT, the upmixer, Downmix, or
+ *  '' for a plain native decode. With procWarn the chosen upmixer is not engaged on this content. */
+function audioFlow({ stream, channels, modeRaw, engaged, stormxt, outputLayout = '' }) {
   const src = nice(stream);
   const srcCh = fmtChannels(channels);
   const mode = nice(modeRaw, SURROUND_MODE);
   const known = okState(modeRaw);
-  const notEngaged = known && engaged === false;
+  const notEngaged = known && engaged === false && !/^native$/i.test(mode);
   const isDownmix = !notEngaged && /downmix/i.test(mode);
   const upmixing = known && !notEngaged && !isDownmix && !/^native$/i.test(mode);
   const xt = stormxt === 'on';
   const layout = fmtChannels(outputLayout);
-  // Processing: StormXT first when on, else the upmixer / Downmix / Native.
-  const proc = !known && !xt ? '' : xt ? 'StormXT' : upmixing ? mode : isDownmix ? 'Downmix' : 'Native';
-  const notes = [xt && upmixing ? mode : '', xt && isDownmix ? 'Downmix' : '', ...effects].filter(Boolean);
+  const proc = xt ? 'StormXT' : notEngaged ? mode : upmixing ? mode : isDownmix ? 'Downmix' : '';
+  // Under StormXT: the upmixer it runs with (or that isn't engaged).
+  const procSub = xt ? (upmixing || notEngaged ? mode : isDownmix ? 'Downmix' : '') : '';
+  const procWarn = notEngaged;
+  const procTitle = notEngaged ? `${mode} is selected but not engaged with this source` : [proc, procSub].filter(Boolean).join(' + ');
   // Output: the format it renders (the upmixer's, Stereo for a downmix, else the source's) on how many channels.
   const out = upmixing ? mode : isDownmix ? 'Stereo' : src;
   const fillsAll = upmixing || xt || OBJECT_FORMATS.test(String(stream || ''));
   const outCh = isDownmix ? fmtChannels('2.0')
     : fillsAll ? (layout || 'All speakers')
       : srcCh;
-  return {
-    src, srcCh, proc,
-    procNote: notEngaged ? `${mode} not engaged` : (notes[0] || ''),
-    procNote2: notEngaged ? notes.join(' · ') : notes.slice(1).join(' · '),
-    procWarn: notEngaged, out, outCh,
-  };
+  return { src, srcCh, proc, procSub, procWarn, procTitle, out, outCh };
+}
+
+/** Resolution + refresh as video people write it: '3840x2160' + '60Hz' → '2160p60'. Else as sent. */
+function fmtVideoMode(res, rate) {
+  if (!okState(res)) return '';
+  const m = String(res).trim().match(/^(\d+)\s*[x×]\s*(\d+)([ip])?$/i);
+  const hz = okState(rate) ? String(rate).replace(/\s*hz$/i, '').trim() : '';
+  if (!m) return [String(res), okState(rate) ? String(rate) : ''].filter(Boolean).join(' · ');
+  return `${m[2]}${(m[3] || 'p').toLowerCase()}${/^[\d.]+$/.test(hz) ? hz : ''}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +412,7 @@ const STYLE_GROUPS = [
   ['card', 'Card', 'Background, border and the status boxes.'],
   ['header', 'Header', 'Icon, title and the live summary on the right.'],
   ['sections', 'Section headers', 'The collapsible Listening / Audio / Video / … rows.'],
-  ['subtitles', 'Subtitles', 'Box headings (SOURCE / FORMAT / VIDEO) and row labels.'],
+  ['subtitles', 'Subtitles', 'Box headings (INPUT / OUTPUT / VIDEO) and row labels.'],
   ['text', 'Values', 'Main values in the status boxes.'],
   ['secondary', 'Details text', 'Second lines, info rows and notes.'],
   ['chips', 'Chips & buttons', 'Source / preset / mode buttons. Active chips use the context color.'],
@@ -428,11 +436,10 @@ const HIDE_LISTS = {
 // a show key is the card's own option (its eye toggles that key); the rest use hidden_items.
 const SECTION_ITEMS = {
   status: [['aflow', 'Audio flow (whole row)', '[data-k="aflow"]', 'show_audio_flow'],
-    ['ain', 'Source audio box', '[data-item="box-ain"]'], ['aproc', 'Processing box', '[data-item="box-aproc"]'],
+    ['ain', 'Input box', '[data-item="box-ain"]'], ['aproc', 'Processing label on the arrow', '[data-item="aproc"]'],
     ['aout', 'Output box', '[data-item="box-aout"]'], ['layout', 'Output channel layout', '', 'show_speaker_layout'],
-    ['vflow', 'Video flow (whole row)', '[data-k="vflow"]', 'show_video_flow'],
-    ['vin', 'Video in box', '[data-item="box-vin"]'], ['vsig', 'Signal box', '[data-item="box-vsig"]'],
-    ['vcol', 'Color box', '[data-item="box-vcol"]'], ['tags', 'Status tags', '[data-k="tags"]']],
+    ['vflow', 'Video box', '[data-k="vflow"]', 'show_video_flow'],
+    ['vdet', 'Video details line (color, copy protection)', '[data-k="vid_1"]'], ['tags', 'Status tags', '[data-k="tags"]']],
   volume: [['slider', 'Volume slider and − / +', '.sa-vollarge'], ['mute', 'Mute', '[data-toggle="mute"]'], ['dim', 'Dim', '[data-toggle="dim"]']],
   listening: [['source', 'Source', '[data-row="source"]'], ['preset', 'Preset', '[data-row="preset"]'], ['surround', 'Surround mode', '[data-row="surround"]']],
   audio: [['loudness', 'Loudness', '[data-row="loudness"]'], ['bass', 'Bass', '[data-slider="bass"]'], ['treble', 'Treble', '[data-slider="treble"]'],
@@ -487,9 +494,17 @@ function normalizeSectionEdits(c, out) {
     });
     if (Object.keys(n).length) out.section_names = n;
   }
+  // Older builds had three video boxes: Color → the details line; all three hidden → no video box.
+  let items = Array.isArray(c.hidden_items) ? c.hidden_items.map((x) => String(x).trim()) : [];
+  const oldVideo = ['status.vin', 'status.vsig', 'status.vcol'];
+  if (oldVideo.every((x) => items.includes(x))) {
+    if (c.show_video_flow === undefined) out.show_video_flow = false;
+    items = items.filter((x) => !oldVideo.includes(x));
+  }
+  items = items.map((x) => (x === 'status.vcol' ? 'status.vdet' : x));
   const ok = new Set(Object.entries(SECTION_ITEMS).flatMap(([sec, items]) => items.filter((i) => !i[3]).map((i) => `${sec}.${i[0]}`)));
   const hidden = [];
-  (Array.isArray(c.hidden_items) ? c.hidden_items : []).forEach((x) => { const v = String(x).trim(); if (ok.has(v) && !hidden.includes(v)) hidden.push(v); });
+  items.forEach((v) => { if (ok.has(v) && !hidden.includes(v)) hidden.push(v); });
   if (hidden.length) out.hidden_items = hidden;
   if (c.section_merge && typeof c.section_merge === 'object') {
     const m = {};
@@ -707,21 +722,40 @@ const CARD_CSS = `
   --mdc-icon-size: 20px; }
 .sa-pwr2:hover { background: color-mix(in srgb, var(--sa-ctx) 20%, transparent); }
 .sa-standby { padding: 2px 0 2px var(--sa-standby-indent, 46px); font-size: var(--sa-secondary-size, 13px); color: var(--sa-secondary-color, var(--secondary-text-color)); }
+.sa-status { container-type: inline-size; }
 .sa-chain { display: flex; gap: 6px; margin-top: 10px; }
 .sa-chain > .sa-box { flex: 1 1 0; }
+.sa-link { flex: 0 0 auto; max-width: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 2px; }
+.sa-link-l { text-align: center; line-height: 1.2; }
+.sa-link-t { font-size: var(--sa-secondary-size, 12px); font-weight: 600; color: var(--sa-ctx); overflow-wrap: anywhere; }
+.sa-link-s { font-size: var(--sa-subtitle-size, 10px); color: var(--sa-secondary-color, var(--secondary-text-color)); overflow-wrap: anywhere; }
+.sa-link-l.warn .sa-link-t { color: var(--warning-color, #ff9800); text-decoration: line-through; }
+.sa-link-t:empty, .sa-link-s:empty { display: none; }
+.sa-volrow { display: flex; align-items: center; gap: 8px; margin: 6px 6px 0; }
+.sa-volrow .sa-vol { flex: 1 1 auto; margin: 0; }
+.sa-vol-v { flex: 0 0 auto; font-size: var(--sa-secondary-size, 12px); color: var(--sa-secondary-color, var(--secondary-text-color)); font-variant-numeric: tabular-nums; }
+/* Narrow card: stack Input over Output, the arrow points down with the processing beside it. */
+@container (max-width: 360px) {
+  .sa-flow2 { flex-direction: column; }
+  .sa-flow2 > .sa-link { max-width: none; flex-direction: row-reverse; gap: 6px; }
+  .sa-flow2 > .sa-link .sa-arrow { transform: rotate(90deg); }
+}
 .sa-uhide, .sa-away { display: none !important; }
 .sa-merged { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--sa-divider-color, rgba(127,127,127,0.2)); }
 .sa-merged-h { margin-bottom: 4px; font-size: var(--sa-subtitle-size, 10px); letter-spacing: .08em; text-transform: uppercase;
   color: var(--sa-subtitle-color, var(--secondary-text-color)); }
 .sa-chain + .sa-chain { margin-top: 6px; }
+.sa-chain[hidden] + .sa-chain { margin-top: 10px; }
 .sa-plain { padding: 6px 0 2px; border-top: 1px solid var(--sa-divider-color, rgba(127,127,127,0.2)); margin-top: 10px; }
 .sa-box-s.warn { color: var(--warning-color, #ff9800); }
 .sa-box { min-width: 0; padding: 8px 6px; border-radius: 10px; text-align: center; background: var(--sa-box); }
 .sa-box-h { font-size: var(--sa-subtitle-size, 10px); letter-spacing: .08em; text-transform: uppercase; color: var(--sa-subtitle-color, var(--secondary-text-color)); }
-.sa-box-t { font-size: var(--sa-text-size, 14px); font-weight: 600; color: var(--sa-text-color, var(--primary-text-color));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sa-box-s { font-size: var(--sa-secondary-size, 12px); color: var(--sa-secondary-color, var(--secondary-text-color));
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sa-box-t { font-size: var(--sa-text-size, 14px); font-weight: 600; color: var(--sa-text-color, var(--primary-text-color)); line-height: 1.25;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.sa-box-s { font-size: var(--sa-secondary-size, 12px); color: var(--sa-secondary-color, var(--secondary-text-color)); line-height: 1.3;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.sa-box-s:empty { display: none; }
+.sa-box-h { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sa-vol { height: 4px; margin: 5px 10% 4px; border-radius: 2px; background: rgba(127,127,127,0.2); overflow: hidden; }
 .sa-vol > span { display: block; height: 100%; border-radius: 2px; background: var(--sa-ctx); transition: width .4s ease; }
 .sa-arrow { align-self: center; color: var(--sa-icon-color, var(--sa-ctx)); --mdc-icon-size: 18px; }
@@ -940,9 +974,14 @@ class StormAudioCard extends HTMLElement {
     const dotAt = cfg(c, 'show_dot') ? cfg(c, 'dot_position') : 'none';
     const dot = (where) => (dotAt === where ? `<span class="sa-dot at-${where}" data-k="dot" data-pos="${where}"></span>` : '');
     if (this._collapsed === undefined) this._collapsed = cfg(c, 'collapsible') && cfg(c, 'start_collapsed');
-    const box = (id, title, bar) => `<div class="sa-box" data-item="box-${id}"><div class="sa-box-h">${title}</div><div class="sa-box-t" data-k="${id}_t"></div>`
-      + `<div class="sa-box-s" data-k="${id}_1"></div>${bar ? '<div class="sa-vol"><span data-k="vol_bar"></span></div>' : ''}<div class="sa-box-s" data-k="${id}_2"></div></div>`;
-    const arrow = '<ha-icon class="sa-arrow" icon="mdi:chevron-right"></ha-icon>';
+    // Status: audio Input → (processing on the arrow) → Output, then one Video box (it passes through).
+    const audioFlowHtml = `<div class="sa-chain sa-flow2" data-k="aflow">
+              <div class="sa-box" data-item="box-ain"><div class="sa-box-h" data-k="ain_h">Input</div><div class="sa-box-t" data-k="ain_t"></div><div class="sa-box-s" data-k="ain_1"></div></div>
+              <div class="sa-link"><div class="sa-link-l" data-item="aproc"><div class="sa-link-t" data-k="aproc_t"></div><div class="sa-link-s" data-k="aproc_1"></div></div><ha-icon class="sa-arrow" icon="mdi:arrow-right"></ha-icon></div>
+              <div class="sa-box" data-item="box-aout"><div class="sa-box-h">Output</div><div class="sa-box-t" data-k="aout_t"></div><div class="sa-box-s" data-k="aout_1"></div>
+                <div class="sa-volrow"><div class="sa-vol"><span data-k="vol_bar"></span></div><span class="sa-vol-v" data-k="aout_2"></span></div></div>
+            </div>`;
+    const videoHtml = `<div class="sa-chain" data-k="vflow"><div class="sa-box sa-wide" data-item="box-video"><div class="sa-box-h" data-k="vid_h">Video</div><div class="sa-box-t" data-k="vid_t"></div><div class="sa-box-s" data-k="vid_1"></div></div></div>`;
     this._setHTML(`
       <style>${CARD_CSS}</style>
       <ha-card class="${rootClasses(c)}" style="${esc(rootStyleVars(c))}">
@@ -958,9 +997,9 @@ class StormAudioCard extends HTMLElement {
         <div class="sa-body" data-k="body">
           ${orderedSections(c).map((id) => {
             if (id === 'status') {
-              return `<div data-sec="status">
-            <div class="sa-chain" data-k="aflow">${box('ain', 'Source audio')}${arrow}${box('aproc', 'Processing')}${arrow}${box('aout', 'Output', true)}</div>
-            <div class="sa-chain" data-k="vflow">${box('vin', 'Video in')}${arrow}${box('vsig', 'Signal')}${arrow}${box('vcol', 'Color')}</div>
+              return `<div class="sa-status" data-sec="status">
+            ${audioFlowHtml}
+            ${videoHtml}
             <div class="sa-tags" data-k="tags"></div>
           </div>`;
             }
@@ -1182,10 +1221,11 @@ class StormAudioCard extends HTMLElement {
       const kids = [...chain.children];
       const boxes = kids.filter((el) => el.classList.contains('sa-box'));
       const shown = boxes.filter((el) => !el.classList.contains('sa-uhide'));
-      kids.forEach((el) => { if (el.classList.contains('sa-arrow')) el.classList.add('sa-uhide'); });
+      const isLink = (el) => el.classList.contains('sa-arrow') || el.classList.contains('sa-link');
+      kids.forEach((el) => { if (isLink(el)) el.classList.add('sa-uhide'); });
       shown.slice(1).forEach((b) => {
         const prev = kids[kids.indexOf(b) - 1];
-        if (prev && prev.classList.contains('sa-arrow')) prev.classList.remove('sa-uhide');
+        if (prev && isLink(prev)) prev.classList.remove('sa-uhide');
       });
       chain.classList.toggle('sa-uhide', boxes.length > 0 && shown.length === 0);
     });
@@ -1301,43 +1341,33 @@ class StormAudioCard extends HTMLElement {
     // audio flow: what the source sends › what the processor does › what plays
     const sm = st('surround_mode');
     const engaged = sm && sm.attributes ? sm.attributes.engaged : undefined;
-    // Source › Processing › Output, e.g. Dolby Digital 5.1 › StormXT › Dolby Digital 7.3.6.
-    const effects = [
-      ['Dolby', pretty(DOLBY_MODE, this._currentOption('dolby_mode')), 'Off'],
-      ['Sphere', nice(this._currentOption('sphereaudio'), SPHERE_EFFECT), 'Bypass'],
-      ['Auro', nice(this._currentOption('auro_preset'), AURO_PRESET), ''],
-      ['Loudness', pretty(LOUDNESS, this._currentOption('loudness')), 'Off'],
-    ].filter(([, val, off]) => val && val !== off).map(([n, val]) => `${n} ${val}`);
+    // Input → (processing on the arrow) → Output, e.g. Dolby Digital 5.1 → StormXT → Dolby Digital 7.3.6.
     const F = audioFlow({ stream: v('stream_type'), channels: v('channel_format'), modeRaw: v('surround_mode'), engaged,
-      stormxt: v('stormxt'), effects, outputLayout: cfg(c, 'output_layout') });
+      stormxt: v('stormxt'), outputLayout: cfg(c, 'output_layout') });
+    set('ain_h', source ? `Input · ${source}` : 'Input');
     set('ain_t', F.src || '—');
-    set('ain_1', F.srcCh || '—');
-    set('ain_2', [nice(v('sample_rate')), source].filter(Boolean).join(' · ') || '—');
-    set('aproc_t', F.proc || '—');
-    set('aproc_1', F.procNote || '—');
-    if (K.aproc_1) K.aproc_1.classList.toggle('warn', F.procWarn);
-    set('aproc_2', F.procNote2 || '—');
+    set('ain_1', [F.srcCh, nice(v('sample_rate'))].filter(Boolean).join(' · '));
+    set('aproc_t', F.proc);
+    set('aproc_1', F.procSub);
+    const procEl = this.querySelector('[data-item="aproc"]');
+    if (procEl) {
+      procEl.classList.toggle('warn', F.procWarn);
+      if (procEl.title !== F.procTitle) procEl.title = F.procTitle;
+    }
     set('aout_t', F.out || '—');
-    set('aout_1', F.outCh || '—');
-    if (K.aout_1) K.aout_1.hidden = !cfg(c, 'show_speaker_layout');
+    set('aout_1', cfg(c, 'show_speaker_layout') ? F.outCh : '');
     const volNow = this._numState('volume');
     const volPct = volNow.value === null ? null : ((volNow.value - volNow.min) / Math.max(1, volNow.max - volNow.min)) * 100;
     const vw = `${Math.max(0, Math.min(100, volPct || 0)).toFixed(1)}%`;
     if (K.vol_bar && K.vol_bar.style.width !== vw) K.vol_bar.style.width = vw;
-    const volText = v('mute') === 'on' ? 'Muted' : (volNow.value === null ? '' : `Volume ${fmtNum(volNow.value, { unit: volNow.unit })}`);
-    set('aout_2', volText || '—');
-    // video flow: input › signal › color
+    set('aout_2', v('mute') === 'on' ? 'Muted' : (volNow.value === null ? '' : `Vol ${fmtNum(volNow.value, { unit: volNow.unit })}`));
+    // Video: the processor passes it through, so one box — the input, the mode, the color.
     const res = v('video_resolution');
     const rate = v('video_refresh');
-    set('vin_t', source || '—');
-    set('vin_1', nice(v('video_input')) || '—');
-    set('vin_2', nice(v('video_cp')) || nice(v('video_sync')) || '—');
-    set('vsig_t', okState(res) ? res : '—');
-    set('vsig_1', okState(rate) ? rate : '—');
-    set('vsig_2', nice(v('video_encoding')) || '—');
-    set('vcol_t', nice(v('video_colorspace')) || '—');
-    set('vcol_1', nice(v('video_colordepth')) || '—');
-    set('vcol_2', nice(v('video_mode')) || '—');
+    const vport = nice(v('video_input')) || source;
+    set('vid_h', vport ? `Video · ${vport}` : 'Video');
+    set('vid_t', [fmtVideoMode(res, rate), nice(v('video_encoding'))].filter(Boolean).join(' · ') || '—');
+    set('vid_1', [nice(v('video_colorspace')), nice(v('video_colordepth')), nice(v('video_mode')), nice(v('video_cp'))].filter(Boolean).join(' · '));
     if (K.aflow) K.aflow.hidden = !cfg(c, 'show_audio_flow') || !(E.stream_type || E.surround_mode || E.active_speaker);
     if (K.vflow) K.vflow.hidden = !cfg(c, 'show_video_flow') || !(E.video_resolution || E.video_encoding || E.video_colorspace);
 
@@ -1345,8 +1375,16 @@ class StormAudioCard extends HTMLElement {
     const tags = [];
     if (isDown) tags.push(['LINK DOWN', 'bad']);
     if (isOn && v('mute') === 'on') tags.push(['MUTED', 'bad']);
-    if (isOn && sm && sm.attributes && sm.attributes.engaged === true) tags.push(['STORM', 'ctx']);
-    if (isOn && v('stormxt') === 'on') tags.push(['STORMXT', 'ctx']);
+    const flowShown = K.aflow && !K.aflow.hidden;
+    if (isOn && v('stormxt') === 'on' && !flowShown) tags.push(['STORMXT', 'ctx']);
+    // effects that are on (the arrow carries the processing; these don't fit there)
+    if (isOn) {
+      [['DOLBY', pretty(DOLBY_MODE, this._currentOption('dolby_mode')), 'Off'],
+        ['SPHERE', nice(this._currentOption('sphereaudio'), SPHERE_EFFECT), 'Bypass'],
+        ['AURO', nice(this._currentOption('auro_preset'), AURO_PRESET), ''],
+        ['LOUDNESS', pretty(LOUDNESS, this._currentOption('loudness')), 'Off'],
+      ].filter(([, val, off]) => val && val !== off).forEach(([n, val]) => tags.push([`${n} ${String(val).toUpperCase()}`, '']));
+    }
     if (isOn && okState(v('video_encoding')) && /hdr|dolby|hlg/i.test(v('video_encoding'))) tags.push([String(v('video_encoding')).toUpperCase(), 'ctx']);
     if (isOn && v('dim') === 'on') tags.push(['DIM', '']);
     html(K.tags, tags.map(([t, cls]) => `<span class="sa-tag ${cls}">${esc(t)}</span>`).join(''));
@@ -2291,7 +2329,7 @@ StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
   WHEN_OFF, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
-  orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels, audioFlow, AUDIO_KEYS,
+  orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels, audioFlow, AUDIO_KEYS, fmtVideoMode,
 };
 
 if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, StormAudioCard);

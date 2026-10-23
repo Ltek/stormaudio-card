@@ -1,5 +1,17 @@
 # Changelog
 
+## v2026.10.23.15
+
+- **Audio flow is two boxes, Input → Output, with the processing on the arrow.** Each box has about half the width, so the encoding and the channels fit.
+  - **Input**: the source in the header (INPUT · HDMI 1), the encoding, then channels, count and sample rate (`5.1 · 6 ch · 48 kHz`).
+  - **Arrow**: StormXT (and the upmixer under it), the upmixer, Downmix — or nothing for a native decode. An upmixer that isn't engaged is struck through in orange; hover for why.
+  - **Output**: the encoding, the channels it plays on, then the volume bar and *Vol 42* / *Muted* on one line.
+- **Video is one box**: the processor passes video through, so Input → Signal → Color showed the same signal three ways. Header with the HDMI port, then `2160p60 · HDR10`, then color space, depth, mode, copy protection.
+- The effects that are on (Dolby mode, SphereAudio, Auro, Loudness) moved from the middle box to the **tags row**. The ambiguous STORM tag is gone; STORMXT is a tag only when the audio flow is hidden.
+- Long values wrap to two lines instead of being cut off with "…", and empty lines disappear instead of showing "—".
+- On a narrow card the Input and Output boxes stack, with the arrow pointing down.
+- Hidden status settings carry over: the old Color box → the video details line; all three video boxes hidden → the video box off.
+
 ## v2026.10.22.14
 
 - **Audio flow reads source › processing › output**, e.g. *Dolby Digital 5.1 · 6 ch › StormXT › Dolby Digital 7.3.6 · 16 ch*.
