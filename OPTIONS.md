@@ -23,6 +23,7 @@ pencil on each row for its name, settings, merge and options) · **Chips** · **
 | `start_collapsed` | `false` | With `collapsible`, start collapsed. |
 | `show_dot` | `true` | Show the link dot (green: reachable, red: not). |
 | `dot_position` | `title` | `title` (right of the title), `right` (far right) or `icon` (replaces the header icon; it is still the power button). |
+| `shrink_when_narrow` | `true` | Scale the whole card down step by step on a narrow card (phones, narrow grid columns): to 92 % below 420 px wide, 85 % below 360, 78 % below 300, 75 % below 240. Under 300 px row labels also move above their chips and long chip names wrap. `false` keeps the full size. Editor: Card → Size. |
 | `stack_when_narrow` | `auto` | Put the status boxes one above the other: `auto` only when the status area is narrower than 260 px (a phone in portrait stays side by side; a small grid column stacks), `always`, or `never`. Editor: Sections → pencil on **Status** → Options. |
 
 ## Power & standby

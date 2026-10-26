@@ -4,7 +4,7 @@ A Home Assistant Dashboard card for **StormAudio, Focal and Bryston processors**
 Focal Astral 16, Bryston SP4). See at a glance what the source sends, what the processor does with it
 and what reaches your speakers, then reach every setting from one card, set up in a visual editor.
 
-Current build: **v2026.10.23.17** · full history in [CHANGELOG.md](CHANGELOG.md) · every YAML option in [OPTIONS.md](OPTIONS.md)
+Current build: **v2026.10.26.18** · full history in [CHANGELOG.md](CHANGELOG.md) · every YAML option in [OPTIONS.md](OPTIONS.md)
 
 ```
  〜  StormAudio ●                         HDMI 1 · Dolby Surround · Dolby Digital
@@ -80,7 +80,7 @@ HACS → **⋮ → Custom repositories** → `https://github.com/Ltek/stormaudio
 ### Works with your setup
 - Finds the processor's entities by their unique IDs, so **renamed entities keep working**.
 - Settings your processor or license doesn't have simply don't appear: no empty rows, no error tiles.
-- **Phone-friendly:** the boxes stay side by side on a phone in portrait, and stack only on a very narrow card. Or choose always / never.
+- **Phone-friendly:** the whole card scales down step by step on a narrow screen, so nothing overflows. The boxes stay side by side on a phone in portrait and stack only on a very narrow card (or choose always / never).
 
 ---
 
