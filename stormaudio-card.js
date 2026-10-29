@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.26.18
+// Version: v2026.10.29.19
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.26.18';
+const BUILD_NUMBER = 'v2026.10.29.19';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -409,18 +409,44 @@ const STYLE_DEFS = [
   ['icon_size', 'icons', 'size', 'Size', 22, 14, 40],
   ['icon_color', 'icons', 'color', 'Color', 'Primary text'],
   ['standby_indent', 'standby', 'size', 'Standby message indent', 46, 0, 160],
+  ['flow_name_size', 'flow', 'size', 'Size', 10, 7, 30, 'subtitle_size'],
+  ['flow_name_weight', 'flow', 'weight', 'Weight', '400'],
+  ['flow_name_color', 'flow', 'color', 'Color', 'Follows Subtitles color'],
+  ['flow_row1_size', 'flow', 'size', 'Size', 14, 7, 30, 'text_size'],
+  ['flow_row1_weight', 'flow', 'weight', 'Weight', '600'],
+  ['flow_row1_color', 'flow', 'color', 'Color', 'Follows Values color'],
+  ['flow_row2_size', 'flow', 'size', 'Size', 12, 7, 30, 'secondary_size'],
+  ['flow_row2_weight', 'flow', 'weight', 'Weight', '400'],
+  ['flow_row2_color', 'flow', 'color', 'Color', 'Follows Details color'],
+  ['flow_row3_size', 'flow', 'size', 'Size', 12, 7, 30, 'secondary_size'],
+  ['flow_row3_weight', 'flow', 'weight', 'Weight', '400'],
+  ['flow_row3_color', 'flow', 'color', 'Color', 'Follows Details color'],
 ];
 const STYLE_GROUPS = [
   ['card', 'Card', 'Background, border and the status boxes.'],
   ['header', 'Header', 'Icon, title and the live summary on the right.'],
   ['sections', 'Section headers', 'The collapsible Listening / Audio / Video / … rows.'],
-  ['subtitles', 'Subtitles', 'Box headings (INPUT / OUTPUT / VIDEO) and row labels.'],
+  ['subtitles', 'Subtitles', 'Box headings (the source name, VIDEO) and row labels.'],
   ['text', 'Values', 'Main values in the status boxes.'],
   ['secondary', 'Details text', 'Second lines, info rows and notes.'],
+  ['flow', 'Status box rows', 'Each row of the two audio boxes, in both boxes at once. A setting left at its default follows Subtitles, Values or Details text.'],
   ['chips', 'Chips & buttons', 'Source / preset / mode buttons. Active chips use the context color.'],
   ['icons', 'Icons', 'Row icons and the status arrows.'],
 ];
 const STYLE_INDEX = Object.fromEntries(STYLE_DEFS.map((d) => [d[0], d]));
+// The status box rows (Appearance → Status box rows): [row id, editor label]. Each has a size, weight and color.
+const FLOW_ROWS = [['name', 'Source name (top line)'], ['row1', 'Encoding'], ['row2', 'Channels'], ['row3', 'Volume']];
+const WEIGHTS = [['300', 'Light'], ['400', 'Regular'], ['500', 'Medium'], ['600', 'Semibold'], ['700', 'Bold']];
+/** A style's value when it isn't set: a row size follows the general size it inherits (index 7). */
+function styleDefault(styles, key) {
+  const def = STYLE_INDEX[key];
+  if (!def) return undefined;
+  if (def[7]) {
+    const v = Number((styles || {})[def[7]]);
+    return Number.isFinite(v) && (styles || {})[def[7]] !== '' ? Math.round(v) : STYLE_INDEX[def[7]][4];
+  }
+  return def[4];
+}
 const TRANSPARENT_KEYS = new Set(['card_background', 'card_border_color', 'box_background', 'divider_color', 'chip_background', 'chip_border_color']);
 const DOT_POSITIONS = [['title', 'Right of the title'], ['right', 'Far right'], ['icon', 'Replace the header icon']];
 // Per-row hidden chips: config key → the select key whose options it filters (ids are the raw options).
@@ -568,9 +594,12 @@ function normalizeConfig(raw) {
       if (!def) { styles[k] = v; return; } // unknown (newer build): keep verbatim
       if (def[2] === 'size') {
         v = Number(v);
-        if (!Number.isFinite(v) || v === def[4]) return;
+        if (!Number.isFinite(v)) return;
         v = Math.round(Math.min(def[6], Math.max(def[5], v)));
-        if (v === def[4]) return;
+        if (v === styleDefault(c.styles, k)) return;
+      } else if (def[2] === 'weight') {
+        v = String(v).trim();
+        if (!WEIGHTS.some(([w]) => w === v) || v === def[4]) return;
       } else v = String(v).trim();
       if (v !== '') styles[k] = v;
     });
@@ -827,7 +856,15 @@ const CARD_CSS = `
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sa-note { margin-top: 8px; font-size: calc(var(--sa-secondary-size, 12px) * var(--sa-k, 1)); line-height: 1.5; color: var(--sa-secondary-color, var(--secondary-text-color)); }
 .sa-note.bad { color: var(--error-color, #f44336); }
-.sa-empty { margin-top: 8px; font-size: calc(var(--sa-secondary-size, 12px) * var(--sa-k, 1)); color: var(--secondary-text-color); font-style: italic; }/* Narrow cards (shrink_when_narrow): the whole card scales down, so nothing overflows on a phone or a
+.sa-empty { margin-top: 8px; font-size: calc(var(--sa-secondary-size, 12px) * var(--sa-k, 1)); color: var(--secondary-text-color); font-style: italic; }/* Status box rows (styles flow_*): each row's size, weight and color, in both boxes at once. Unset, a row
+   follows the general setting (Subtitles / Values / Details text). An empty top line keeps its height so
+   the rows of the two boxes stay level. */
+.sa-flow2 .sa-box-h { font-size: calc(var(--sa-flow-name-size, var(--sa-subtitle-size, 10px)) * var(--sa-k, 1)); font-weight: var(--sa-flow-name-weight, 400); color: var(--sa-flow-name-color, var(--sa-subtitle-color, var(--secondary-text-color))); }
+.sa-flow2 .sa-box-t { font-size: calc(var(--sa-flow-row1-size, var(--sa-text-size, 14px)) * var(--sa-k, 1)); font-weight: var(--sa-flow-row1-weight, 600); color: var(--sa-flow-row1-color, var(--sa-text-color, var(--primary-text-color))); }
+.sa-flow2 .sa-box-s { font-size: calc(var(--sa-flow-row2-size, var(--sa-secondary-size, 12px)) * var(--sa-k, 1)); font-weight: var(--sa-flow-row2-weight, 400); color: var(--sa-flow-row2-color, var(--sa-secondary-color, var(--secondary-text-color))); }
+.sa-flow2 .sa-vol-v { font-size: calc(var(--sa-flow-row3-size, var(--sa-secondary-size, 12px)) * var(--sa-k, 1)); font-weight: var(--sa-flow-row3-weight, 400); color: var(--sa-flow-row3-color, var(--sa-secondary-color, var(--secondary-text-color))); }
+.sa-flow2 .sa-box-h { min-height: 1.2em; line-height: 1.2; }
+/* Narrow cards (shrink_when_narrow): the whole card scales down, so nothing overflows on a phone or a
    narrow grid column. --sa-k multiplies every size above; it is set on the card's children because a
    container query styles the container's descendants, not the container itself. Below .75 text gets
    too small to read and tap. */
@@ -1002,9 +1039,9 @@ class StormAudioCard extends HTMLElement {
     if (this._collapsed === undefined) this._collapsed = cfg(c, 'collapsible') && cfg(c, 'start_collapsed');
     // Status: audio Input → (processing on the arrow) → Output, then one Video box (it passes through).
     const audioFlowHtml = `<div class="sa-chain sa-flow2" data-k="aflow">
-              <div class="sa-box" data-item="box-ain"><div class="sa-box-h" data-k="ain_h">Input</div><div class="sa-box-t" data-k="ain_t"></div><div class="sa-box-s" data-k="ain_1"></div></div>
+              <div class="sa-box" data-item="box-ain"><div class="sa-box-h" data-k="ain_h"></div><div class="sa-box-t" data-k="ain_t"></div><div class="sa-box-s" data-k="ain_1"></div></div>
               <div class="sa-link"><div class="sa-link-l" data-item="aproc"><div class="sa-link-t" data-k="aproc_t"></div><div class="sa-link-s" data-k="aproc_1"></div></div><ha-icon class="sa-arrow" icon="mdi:arrow-right"></ha-icon></div>
-              <div class="sa-box" data-item="box-aout"><div class="sa-box-h">Output</div><div class="sa-box-t" data-k="aout_t"></div><div class="sa-box-s" data-k="aout_1"></div>
+              <div class="sa-box" data-item="box-aout"><div class="sa-box-h"></div><div class="sa-box-t" data-k="aout_t"></div><div class="sa-box-s" data-k="aout_1"></div>
                 <div class="sa-volrow"><div class="sa-vol"><span data-k="vol_bar"></span></div><span class="sa-vol-v" data-k="aout_2"></span></div></div>
             </div>`;
     const videoHtml = `<div class="sa-chain" data-k="vflow"><div class="sa-box sa-wide" data-item="box-video"><div class="sa-box-h" data-k="vid_h">Video</div><div class="sa-box-t" data-k="vid_t"></div><div class="sa-box-s" data-k="vid_1"></div></div></div>`;
@@ -1370,7 +1407,8 @@ class StormAudioCard extends HTMLElement {
     // Input → (processing on the arrow) → Output, e.g. Dolby Digital 5.1 → StormXT → Dolby Digital 7.3.6.
     const F = audioFlow({ stream: v('stream_type'), channels: v('channel_format'), modeRaw: v('surround_mode'), engaged,
       stormxt: v('stormxt'), outputLayout: cfg(c, 'output_layout') });
-    set('ain_h', source ? `Input · ${source}` : 'Input');
+    // the boxes' places say input and output: the top line names only the source
+    set('ain_h', source || '');
     set('ain_t', F.src || '—');
     // Same rows on both sides: encoding, then channels. The sample rate has no output counterpart, so it
     // is on the box's tooltip (and in Info) rather than on the channels row.
@@ -2022,6 +2060,22 @@ class StormAudioCardEditor extends HTMLElement {
       ${field}</div></div>`;
   }
 
+  /** One Appearance control for a STYLE_DEFS entry. */
+  _styleControl([key, , kind, label, def, min, max], st) {
+    if (kind === 'size') return this._slider(key, label, st[key] !== undefined ? st[key] : styleDefault(st, key), min, max, 1, 'styles');
+    if (kind === 'weight') return this._weightControl(key, label, def);
+    return this._colorControl(key, label, def, '#2196f3', 'styles');
+  }
+
+  /** Font weight select (styles): '' = the row's default. */
+  _weightControl(key, label, def) {
+    const cur = this._get(key, 'styles') || '';
+    const name = (WEIGHTS.find(([w]) => w === def) || [, def])[1];
+    return `<div class="sae-row"><label class="lbl">${label}</label><select data-wkey="${key}">
+      <option value=""${cur ? '' : ' selected'}>Default (${name})</option>
+      ${WEIGHTS.map(([w, n]) => `<option value="${w}"${w === cur ? ' selected' : ''}>${n}</option>`).join('')}</select></div>`;
+  }
+
   _slider(key, label, value, min, max, step, scope = '', fmt = (n) => `${n}px`) {
     const isSet = this._get(key, scope) !== undefined;
     return `<div class="sae-row sae-nowrap"><label class="lbl">${label}</label>
@@ -2221,9 +2275,9 @@ class StormAudioCardEditor extends HTMLElement {
           <input type="text" data-icon="${k}" value="${esc(((c.icons || {})[k] || '').replace(/^mdi:/, ''))}" placeholder="${ICON_DEFAULTS[k].replace(/^mdi:/, '')}"></div>`).join('')}`;
     const looks = STYLE_GROUPS.map(([g, title, hint]) => this._sub(`look-${g}`, title, `
       <p class="sae-hint">${hint}</p>
-      ${STYLE_DEFS.filter((d) => d[1] === g).map(([key, , kind, label, def, min, max]) => (kind === 'size'
-        ? this._slider(key, label, st[key] !== undefined ? st[key] : def, min, max, 1, 'styles')
-        : this._colorControl(key, label, def, '#2196f3', 'styles'))).join('')}`)).join('')
+      ${g === 'flow'
+        ? FLOW_ROWS.map(([rid, rlabel]) => `<div class="sae-group">${rlabel}</div>${STYLE_DEFS.filter((d) => d[0].startsWith(`flow_${rid}_`)).map((d) => this._styleControl(d, st)).join('')}`).join('')
+        : STYLE_DEFS.filter((d) => d[1] === g).map((d) => this._styleControl(d, st)).join('')}`)).join('')
       + this._sub('look-context', 'Context colors', `
       <p class="sae-hint">The accent tints the card when on; the header icon turns the "starting / stopping" color while the processor changes power state.</p>
       ${CONTEXT_COLORS.map(([k, l, d, seed]) => this._colorControl(k, l, d, seed)).join('')}`);
@@ -2261,8 +2315,7 @@ class StormAudioCardEditor extends HTMLElement {
       el.addEventListener('change', () => {
         const n = Number(el.value);
         if (scope) {
-          const def = STYLE_INDEX[key];
-          this._set(key, def && n === def[4] ? '' : n, scope);
+          this._set(key, STYLE_INDEX[key] && n === styleDefault(this._config.styles, key) ? '' : n, scope);
         } else this._set(key, n);
         this._render();
       });
@@ -2332,6 +2385,10 @@ class StormAudioCardEditor extends HTMLElement {
       this._emit();
       this._render();
     }));
+    this.querySelectorAll('[data-wkey]').forEach((sel) => sel.addEventListener('change', () => {
+      this._set(sel.dataset.wkey, sel.value, 'styles');
+      this._render();
+    }));
     this.querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', () => {
       this._set(b.dataset.reset, '', b.dataset.scope);
       this._render();
@@ -2365,7 +2422,7 @@ class StormAudioCardEditor extends HTMLElement {
 // Test hooks (pure helpers; no effect in the browser)
 StormAudioCard._test = {
   BUILD_NUMBER, CARD_CSS, EDITOR_CSS, DEFAULTS, ENTITY_KEYS, ENTITY_ORDER, OPTIONAL_ENTITIES, STYLE_DEFS, ICON_DEFAULTS,
-  WHEN_OFF, STACK_MODES, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
+  WHEN_OFF, STACK_MODES, FLOW_ROWS, WEIGHTS, styleDefault, SECTION_ITEMS, MERGE_TARGETS, mergeTarget, secLabel, normalizeConfig, normalizeIcon, REGISTRY, platformEntities, rootStyleVars, rootClasses, resolveEntities, listDevices, pretty, fmtNum, stripPrefix, colorMode,
   DOLBY_MODE, LOUDNESS, FP_COLOR, HIDE_LISTS, FOLDS, FOLD_SHOW, nice, SURROUND_MODE, AURO_PRESET, SPHERE_EFFECT, FORMAT_TERMS,
   orderedFolds, orderedSections, SECTION_IDS, channelCount, fmtChannels, audioFlow, AUDIO_KEYS, fmtVideoMode,
 };

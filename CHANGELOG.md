@@ -1,5 +1,10 @@
 # Changelog
 
+## v2026.10.29.19
+
+- **The status boxes drop the Input / Output words: the left box's top line names only the source (HDMI 1, Apple TV 4K), the right box's is empty (it keeps its height so the rows stay level).** The boxes' places already say which side is which.
+- **Size, weight and color for each row of the status boxes**, set once for both boxes: Appearance → **Status box rows**: Source name, Encoding, Channels, Volume. YAML: `styles: flow_<name|row1|row2|row3>_<size|weight|color>`. A row left at its default follows Subtitles / Values / Details text as before, so nothing changes until you set one. The video box keeps following the general settings.
+
 ## v2026.10.26.18
 
 - **The card shrinks properly on narrow screens** (phones, narrow grid columns). Text, chips, toggles, sliders, the volume keys, icons and the status boxes scale down step by step as the card gets narrower (to 92 % below 420 px, 85 % below 360, 78 % below 300, 75 % below 240). Before, everything kept its desktop size: on a 250 px card a source chip and the slider values ran off the right edge, and the volume value was cut off. Wide cards look exactly as before.
