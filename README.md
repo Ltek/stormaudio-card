@@ -4,7 +4,7 @@ A Home Assistant Dashboard card for **StormAudio, Focal and Bryston processors**
 Focal Astral 16, Bryston SP4). See at a glance what the source sends, what the processor does with it
 and what reaches your speakers, then reach every setting from one card, set up in a visual editor.
 
-Current build: **v2026.10.29.19** · full history in [CHANGELOG.md](CHANGELOG.md) · every YAML option in [OPTIONS.md](OPTIONS.md)
+Current build: **v2026.10.30.20** · full history in [CHANGELOG.md](CHANGELOG.md) · every YAML option in [OPTIONS.md](OPTIONS.md)
 
 ```
  〜  StormAudio ●                         HDMI 1 · Dolby Surround · Dolby Digital

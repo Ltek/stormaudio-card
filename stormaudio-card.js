@@ -1,5 +1,5 @@
 // StormAudio Card — Home Assistant Dashboard card for StormAudio / Focal / Bryston processors
-// Version: v2026.10.29.19
+// Version: v2026.10.30.20
 //
 // Read-only status on top (power → source → audio format → video), then every control
 // lives in a collapsed section (Listening, Audio, Video, Zones, Triggers, Front panel,
@@ -13,7 +13,7 @@
 // sets no translation_key), so renamed entity IDs keep working; disabled entities
 // simply don't appear.
 
-const BUILD_NUMBER = 'v2026.10.29.19';
+const BUILD_NUMBER = 'v2026.10.30.20';
 const CARD_TAG = 'stormaudio-card';
 const EDITOR_TAG = 'stormaudio-card-editor';
 const PLATFORM = 'stormaudio';
@@ -2434,7 +2434,7 @@ window.customCards = window.customCards || [];
 if (!window.customCards.some((c) => c.type === CARD_TAG)) {
   window.customCards.push({
     type: CARD_TAG,
-    name: 'StormAudio Card',
+    name: 'StormAudio Card (Ltek)',
     description: 'StormAudio / Focal / Bryston processor: power, source, audio format and video status, and collapsible listening, audio, video, zones, triggers, front-panel and info sections.',
     preview: false,
     documentationURL: 'https://github.com/Ltek/stormaudio-card',

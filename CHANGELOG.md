@@ -1,5 +1,9 @@
 # Changelog
 
+## v2026.10.30.20
+
+- **Named "StormAudio Card (Ltek)" in Home Assistant's *Add card* picker**, matching its HACS name, so searching "Ltek" finds it. The card type is unchanged, so existing dashboards are not affected.
+
 ## v2026.10.29.19
 
 - **The status boxes drop the Input / Output words: the left box's top line names only the source (HDMI 1, Apple TV 4K), the right box's is empty (it keeps its height so the rows stay level).** The boxes' places already say which side is which.
