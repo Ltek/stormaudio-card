@@ -85,6 +85,32 @@ HACS → **⋮ → Custom repositories** → `https://github.com/Ltek/stormaudio
 
 ---
 
+## Screenshots
+
+Drop images into `screenshots/` and push: GitHub rebuilds this gallery by itself. The pictures here
+show a made-up device, so names and values on yours will differ.
+
+<!-- SCREENSHOTS:START -->
+<table>
+  <tr>
+    <td align="center" valign="top">
+      <img src="screenshots/01-atmos-playing.png" width="100%" alt="01 atmos playing">
+    </td>
+    <td align="center" valign="top">
+      <img src="screenshots/02-listening-open.png" width="100%" alt="02 listening open">
+    </td>
+    <td align="center" valign="top">
+      <img src="screenshots/03-audio-and-video.png" width="100%" alt="03 audio and video">
+    </td>
+    <td align="center" valign="top">
+      <img src="screenshots/04-light-theme.png" width="100%" alt="04 light theme">
+    </td>
+  </tr>
+</table>
+<!-- SCREENSHOTS:END -->
+
+---
+
 ## Credits
 
 - **[StormAudio](https://www.stormaudio.com)** for the published TCP/IP API this card and its
